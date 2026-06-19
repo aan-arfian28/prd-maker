@@ -1,33 +1,39 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import type { AiModelInfo } from "@/lib/modelList";
+import React, { useState, useEffect, useCallback } from "react";
+import type { AiModelInfo, AppSettings, ProviderType } from "@/lib/types";
 import { FALLBACK_MODELS } from "@/lib/modelList";
+import { PROVIDER_META, ALL_PROVIDERS } from "@/lib/providers/types";
+import PromptEditor from "./PromptEditor";
 
-export interface AppSettings {
-  apiKey: string;
-  model: string; // model name e.g. "deepseek-chat"
-}
+/* ------------------------------------------------------------------ */
+/*  Storage helpers                                                    */
+/* ------------------------------------------------------------------ */
 
 const STORAGE_KEY = "ai-prd-maker-settings";
 
+const DEFAULT_SETTINGS: AppSettings = {
+  provider: "deepseek",
+  apiKey: "",
+  model: "deepseek-chat",
+};
+
 function loadSettings(): AppSettings {
-  if (typeof window === "undefined") {
-    return { apiKey: "", model: "deepseek-chat" };
-  }
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
+        provider: parsed.provider || DEFAULT_SETTINGS.provider,
         apiKey: parsed.apiKey || "",
-        model: parsed.model || "deepseek-chat",
+        model: parsed.model || DEFAULT_SETTINGS.model,
       };
     }
   } catch {
     // ignore
   }
-  return { apiKey: "", model: "deepseek-chat" };
+  return DEFAULT_SETTINGS;
 }
 
 function saveSettings(settings: AppSettings) {
@@ -47,7 +53,7 @@ function clearSettings() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Hook to share settings across components                          */
+/*  Shared settings state                                              */
 /* ------------------------------------------------------------------ */
 
 let cachedSettings: AppSettings | null = null;
@@ -60,6 +66,7 @@ export function getStoredSettings(): AppSettings {
 
 export function useSettings(): {
   settings: AppSettings;
+  setProvider: (provider: ProviderType) => void;
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
   clearAll: () => void;
@@ -74,33 +81,87 @@ export function useSettings(): {
     };
   }, []);
 
-  const setApiKey = useCallback((apiKey: string) => {
+  const update = useCallback((patch: Partial<AppSettings>) => {
     const current = getStoredSettings();
-    const updated = { ...current, apiKey };
+    const updated = { ...current, ...patch };
     cachedSettings = updated;
     saveSettings(updated);
     listeners.forEach((l) => l());
   }, []);
 
-  const setModel = useCallback((model: string) => {
-    const current = getStoredSettings();
-    const updated = { ...current, model };
-    cachedSettings = updated;
-    saveSettings(updated);
-    listeners.forEach((l) => l());
-  }, []);
+  const setProvider = useCallback(
+    (provider: ProviderType) => {
+      const meta = PROVIDER_META[provider];
+      update({ provider, model: meta.defaultModel });
+    },
+    [update]
+  );
+
+  const setApiKey = useCallback(
+    (apiKey: string) => update({ apiKey }),
+    [update]
+  );
+
+  const setModel = useCallback(
+    (model: string) => update({ model }),
+    [update]
+  );
 
   const clearAll = useCallback(() => {
-    cachedSettings = { apiKey: "", model: "deepseek-chat" };
+    cachedSettings = DEFAULT_SETTINGS;
     clearSettings();
     listeners.forEach((l) => l());
   }, []);
 
-  return { settings, setApiKey, setModel, clearAll };
+  return { settings, setProvider, setApiKey, setModel, clearAll };
 }
 
 /* ------------------------------------------------------------------ */
-/*  Modal component                                                   */
+/*  Provider icon helper                                               */
+/* ------------------------------------------------------------------ */
+
+function ProviderIcon({ provider }: { provider: ProviderType }) {
+  const icons: Record<ProviderType, React.ReactNode> = {
+    openai: (
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z" fill="currentColor" opacity="0.15" />
+        <path d="M12 6a6 6 0 100 12 6 6 0 000-12z" fill="currentColor" />
+      </svg>
+    ),
+    deepseek: (
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    ),
+    gemini: (
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="3" />
+        <circle cx="12" cy="5" r="1.5" />
+        <circle cx="12" cy="19" r="1.5" />
+        <circle cx="5" cy="8" r="1.5" />
+        <circle cx="19" cy="8" r="1.5" />
+        <circle cx="5" cy="16" r="1.5" />
+        <circle cx="19" cy="16" r="1.5" />
+      </svg>
+    ),
+    grok: (
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="9" />
+        <path strokeLinecap="round" d="M8 12l3 3 5-6" />
+      </svg>
+    ),
+    anthropic: (
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <path strokeLinecap="round" d="M7 10v4M12 10v4M17 10v4" />
+      </svg>
+    ),
+  };
+  return icons[provider] || icons.deepseek;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Modal component                                                    */
 /* ------------------------------------------------------------------ */
 
 interface SettingsModalProps {
@@ -109,30 +170,35 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { settings, setApiKey, setModel, clearAll } = useSettings();
+  const { settings, setProvider, setApiKey, setModel, clearAll } = useSettings();
   const [apiKeyInput, setApiKeyInput] = useState(settings.apiKey);
   const [showKey, setShowKey] = useState(false);
-  const [models, setModels] = useState<AiModelInfo[]>(FALLBACK_MODELS);
+  const [models, setModels] = useState<AiModelInfo[]>(
+    FALLBACK_MODELS[settings.provider] || []
+  );
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+
+  const meta = PROVIDER_META[settings.provider];
 
   // Sync local input when settings change externally
   useEffect(() => {
     setApiKeyInput(settings.apiKey);
   }, [settings.apiKey]);
 
-  // Fetch model list when modal opens with a key
+  // Fetch model list when modal opens or provider changes
   useEffect(() => {
     if (isOpen && settings.apiKey) {
-      fetchModels(settings.apiKey);
+      fetchModels(settings.provider, settings.apiKey);
     } else if (isOpen) {
-      setModels(FALLBACK_MODELS);
+      setModels(FALLBACK_MODELS[settings.provider] || []);
     }
-  }, [isOpen, settings.apiKey]);
+  }, [isOpen, settings.provider, settings.apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function fetchModels(apiKey: string) {
+  async function fetchModels(provider: ProviderType, apiKey: string) {
     if (!apiKey) {
-      setModels(FALLBACK_MODELS);
+      setModels(FALLBACK_MODELS[provider] || []);
       return;
     }
     setIsLoadingModels(true);
@@ -140,7 +206,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       const res = await fetch("/api/list-models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify({ apiKey, provider }),
       });
       const data = await res.json();
       if (data.models && Array.isArray(data.models)) {
@@ -162,7 +228,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   function handleClear() {
     setApiKeyInput("");
     clearAll();
-    setModels(FALLBACK_MODELS);
+    setModels(FALLBACK_MODELS.deepseek);
+  }
+
+  function handleProviderChange(provider: ProviderType) {
+    setProvider(provider);
+    setModels(FALLBACK_MODELS[provider] || []);
+    // Clear the model to the new provider's default
   }
 
   function handleOverlayClick(e: React.MouseEvent) {
@@ -183,7 +255,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             </svg>
-            <h2 className="text-lg font-semibold text-white">Pengaturan</h2>
+            <h2 className="text-lg font-semibold text-white">Pengaturan AI</h2>
           </div>
           <button
             onClick={onClose}
@@ -198,17 +270,52 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
         {/* Body */}
         <div className="p-6 space-y-5">
+          {/* AI Provider Selector */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              Penyedia AI
+            </label>
+            <div className="grid grid-cols-1 gap-1.5">
+              {ALL_PROVIDERS.map((p) => {
+                const pMeta = PROVIDER_META[p];
+                const isActive = settings.provider === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => handleProviderChange(p)}
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-all text-left ${
+                      isActive
+                        ? "bg-indigo-50 border-2 border-indigo-500 text-indigo-700 font-medium"
+                        : "bg-gray-50 border-2 border-transparent text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    <span className={isActive ? "text-indigo-600" : "text-gray-400"}>
+                      <ProviderIcon provider={p} />
+                    </span>
+                    <span>{pMeta.label}</span>
+                    {isActive && (
+                      <svg className="w-4 h-4 ml-auto text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* API Key */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-              DeepSeek API Key
+              {meta.label} API Key
             </label>
             <div className="relative">
               <input
                 type={showKey ? "text" : "password"}
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder="Masukkan DeepSeek API Key..."
+                placeholder={`Masukkan ${meta.label} API Key...`}
                 className="w-full px-4 py-2.5 pr-20 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 transition-all font-mono"
               />
               <button
@@ -231,14 +338,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
             <p className="mt-1.5 text-xs text-gray-400">
               <a
-                href="https://platform.deepseek.com/api_keys"
+                href={meta.apiKeyHelpUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-indigo-600 hover:text-indigo-800 underline"
               >
                 Dapatkan API Key
               </a>
-              {" "}dari DeepSeek Platform. Key disimpan di browser Anda.
+              {" "}dari {meta.label}. Key disimpan di browser Anda.
             </p>
           </div>
 
@@ -261,7 +368,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </select>
               <button
                 type="button"
-                onClick={() => fetchModels(settings.apiKey || apiKeyInput)}
+                onClick={() => fetchModels(settings.provider, settings.apiKey || apiKeyInput)}
                 disabled={isLoadingModels}
                 className="px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-700 transition-all disabled:opacity-50"
                 title="Refresh model list"
@@ -275,7 +382,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 )}
               </button>
             </div>
-            {/* Show selected model description */}
             {(() => {
               const selected = models.find((m) => m.name === settings.model);
               return selected?.description ? (
@@ -284,12 +390,38 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             })()}
           </div>
 
+          {/* Prompt Editor trigger */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setPromptEditorOpen(true)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-gray-50 to-indigo-50 hover:from-gray-100 hover:to-indigo-100 border border-gray-200 hover:border-indigo-300 rounded-xl transition-all group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-gray-700">Customize Prompts</p>
+                  <p className="text-xs text-gray-400">Edit system prompts untuk setiap tahap pipeline AI</p>
+                </div>
+              </div>
+              <svg className="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
           {/* Status indicator */}
           <div className="flex items-center gap-2 text-xs">
             {settings.apiKey ? (
               <>
                 <div className="w-2 h-2 bg-green-500 rounded-full" />
-                <span className="text-green-600">API Key tersimpan</span>
+                <span className="text-green-600">
+                  API Key {meta.label} tersimpan
+                </span>
               </>
             ) : (
               <>
@@ -335,6 +467,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
         </div>
       </div>
+
+      {/* Prompt Editor (separate modal, higher z-index) */}
+      <PromptEditor
+        isOpen={promptEditorOpen}
+        onClose={() => setPromptEditorOpen(false)}
+      />
     </div>
   );
 }

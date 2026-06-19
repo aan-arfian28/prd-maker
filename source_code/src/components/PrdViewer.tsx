@@ -5,6 +5,7 @@ import type { ChatMessage } from "@/lib/types";
 import MarkdownRenderer from "./MarkdownRenderer";
 import ChatPanel from "./ChatPanel";
 import { getStoredSettings } from "./SettingsModal";
+import { loadCustomPrompts } from "@/lib/prompt-customization";
 
 interface PrdViewerProps {
   markdown: string;
@@ -44,8 +45,10 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
             prdContent: markdown,
             messages: messages.map((m) => ({ role: m.role, content: m.content })),
             newMessage,
+            provider: settings.provider || undefined,
             apiKey: settings.apiKey || undefined,
             model: settings.model || undefined,
+            customPrompts: loadCustomPrompts() || undefined,
           }),
         });
 

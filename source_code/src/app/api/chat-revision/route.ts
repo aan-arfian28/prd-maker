@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chatRevision } from "@/lib/deepseek";
+import { resolveProviderType, resolveApiKey, resolveModel, getProvider } from "@/lib/providers/registry";
+import { getEffectivePrompt } from "@/lib/prompt-customization";
+import type { ProviderType } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
   try {
-    const { prdContent, messages, newMessage, apiKey, model } = await request.json();
+    const body = await request.json();
+    const {
+      prdContent,
+      messages,
+      newMessage,
+      apiKey: userApiKey,
+      model: userModel,
+      provider: userProvider,
+      customPrompts,
+    } = body;
 
     if (!prdContent || typeof prdContent !== "string") {
       return NextResponse.json(
@@ -19,24 +30,83 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for API key: user-provided takes precedence, then env
-    const effectiveKey = apiKey || process.env.DEEPSEEK_API_KEY || "";
-    if (!effectiveKey || effectiveKey === "your_deepseek_api_key_here") {
+    const providerType: ProviderType = resolveProviderType(userProvider);
+    const apiKey = resolveApiKey(providerType, userApiKey);
+
+    if (!apiKey) {
       return NextResponse.json(
-        { error: "API Key DeepSeek belum dikonfigurasi. Silakan atur di Pengaturan atau set DEEPSEEK_API_KEY di file .env.local" },
+        {
+          error: `API Key untuk ${providerType} belum dikonfigurasi. Silakan atur di Pengaturan.`,
+        },
         { status: 500 }
       );
     }
 
-    const result = await chatRevision(
-      prdContent,
-      messages || [],
-      newMessage.trim(),
-      apiKey,
-      model
-    );
+    const model = resolveModel(providerType, userModel);
+    const provider = getProvider(providerType);
 
-    return NextResponse.json(result);
+    const chatHistory = (messages || [])
+      .map((m: { role: string; content: string }) =>
+        `${m.role === "user" ? "User" : "AI"}: ${m.content}`
+      )
+      .join("\n");
+
+    const chatRevisionPrompt = getEffectivePrompt("chatRevision", customPrompts || null);
+    const systemPrompt = chatRevisionPrompt
+      .replace("{prdContent}", prdContent)
+      .replace("{chatHistory}", chatHistory);
+
+    // Convert messages to provider format
+    const chatMessages: { role: "user" | "assistant"; content: string }[] = [
+      ...(messages || []).map((m: { role: string; content: string }) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+      { role: "user" as const, content: newMessage.trim() },
+    ];
+
+    // Try up to 3 times for valid JSON
+    let lastError: string | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const text = await provider.chatCompletion(
+          systemPrompt,
+          chatMessages,
+          apiKey,
+          model
+        );
+
+        // Extract JSON from response
+        let jsonStr = text.trim();
+
+        // Remove markdown code block if present
+        if (jsonStr.startsWith("```")) {
+          const match = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+          if (match) {
+            jsonStr = match[1].trim();
+          }
+        }
+
+        const parsed = JSON.parse(jsonStr);
+
+        if (parsed.prd && parsed.message) {
+          return NextResponse.json({
+            prd: parsed.prd,
+            message: parsed.message,
+          });
+        }
+
+        throw new Error("Response missing required fields (prd, message)");
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        if (err instanceof SyntaxError || lastError.includes("missing required")) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new Error(`Gagal menghasilkan respons yang valid setelah 3 percobaan: ${lastError}`);
   } catch (error) {
     console.error("Error in chat revision:", error);
     const message =

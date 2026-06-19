@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { ChatMessage } from "@/lib/types";
+import type { ChatMessage, ProviderType } from "@/lib/types";
+import { PROVIDER_META } from "@/lib/providers/types";
+import { loadCustomPrompts } from "@/lib/prompt-customization";
 import PromptInput from "@/components/PromptInput";
 import PrdViewer from "@/components/PrdViewer";
 import PrdHistory from "@/components/PrdHistory";
@@ -12,22 +14,28 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [progressMessage, setProgressMessage] = useState<string>("");
+  const [currentProvider, setCurrentProvider] = useState<ProviderType>("deepseek");
 
   const handleGenerate = useCallback(async (prompt: string) => {
     setIsLoading(true);
     setError(null);
     setPrdContent("");
+    setProgressMessage("Menganalisis ide produk...");
 
     try {
       const settings = getStoredSettings();
+      setCurrentProvider(settings.provider);
 
       const response = await fetch("/api/generate-prd", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
+          provider: settings.provider || undefined,
           apiKey: settings.apiKey || undefined,
           model: settings.model || undefined,
+          customPrompts: loadCustomPrompts() || undefined,
         }),
       });
 
@@ -37,6 +45,7 @@ export default function Home() {
         throw new Error(data.error || "Gagal membuat PRD");
       }
 
+      setProgressMessage("PRD berhasil dibuat!");
       setPrdContent(data.prd);
     } catch (err) {
       const message =
@@ -44,6 +53,7 @@ export default function Home() {
       setError(message);
     } finally {
       setIsLoading(false);
+      setTimeout(() => setProgressMessage(""), 3000);
     }
   }, []);
 
@@ -78,6 +88,9 @@ export default function Home() {
     setError(null);
   }
 
+  const providerMeta = PROVIDER_META[currentProvider];
+  const providerName = providerMeta?.label || "AI";
+
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -93,7 +106,7 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">AI PRD Maker</h1>
-              <p className="text-xs text-gray-500">Powered by DeepSeek AI</p>
+              <p className="text-xs text-gray-500">Multi-AI Powered PRD Generator</p>
             </div>
           </div>
 
@@ -114,7 +127,7 @@ export default function Home() {
             <button
               onClick={() => setSettingsOpen(true)}
               className="text-sm text-gray-500 hover:text-indigo-600 transition-colors flex items-center gap-1"
-              title="Pengaturan API Key & Model"
+              title="Pengaturan API Key & Model AI"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -142,7 +155,7 @@ export default function Home() {
                   onClick={() => setSettingsOpen(true)}
                   className="inline-block mt-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
                 >
-                  Buka Pengaturan untuk memasukkan API Key DeepSeek
+                  Buka Pengaturan untuk memasukkan API Key
                 </button>
               )}
             </div>
@@ -166,8 +179,10 @@ export default function Home() {
               </div>
               <h3 className="text-lg font-semibold text-gray-800 mb-2">Membuat PRD Anda...</h3>
               <p className="text-sm text-gray-500 max-w-md">
-                AI sedang menganalisis kebutuhan Anda dan membuat PRD profesional lengkap dengan diagram.
-                Ini mungkin memerlukan waktu beberapa detik.
+                {progressMessage || "AI sedang menganalisis kebutuhan Anda dan membuat PRD profesional lengkap dengan diagram."}
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                Menggunakan pipeline modular untuk hasil yang lebih detail dan berkualitas
               </p>
               <div className="mt-4 flex gap-1.5">
                 <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse" style={{ animationDelay: "0s" }} />
@@ -192,7 +207,7 @@ export default function Home() {
               {/* Hero Section */}
               <div className="text-center mb-10 mt-4">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-full text-xs font-medium text-indigo-600 mb-4">
-                  ✨ Powered by DeepSeek AI
+                  ✨ Multi-AI: OpenAI · DeepSeek · Gemini · Grok · Claude
                 </div>
                 <h2 className="text-3xl font-bold text-gray-900 mb-3">
                   Buat PRD Profesional dengan AI
@@ -200,7 +215,8 @@ export default function Home() {
                 <p className="text-gray-500 max-w-lg mx-auto leading-relaxed">
                   Deskripsikan aplikasi yang ingin Anda bangun, dan AI akan membuatkan{" "}
                   <strong>Product Requirements Document</strong> lengkap dengan diagram UML,
-                  database schema, user flow, dan spesifikasi teknis.
+                  database schema, user flow, dan spesifikasi teknis — menggunakan pipeline
+                  modular untuk hasil yang sangat detail.
                 </p>
 
                 <button
@@ -247,6 +263,25 @@ export default function Home() {
                   <p className="text-xs text-gray-500">Diskusikan & revisi PRD melalui chat interaktif dengan AI</p>
                 </div>
               </div>
+
+              {/* Multi-Provider Badge */}
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                {(["openai", "deepseek", "gemini", "grok", "anthropic"] as ProviderType[]).map((p) => (
+                  <div
+                    key={p}
+                    className="px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-500 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <div className={`w-2 h-2 rounded-full ${
+                      p === "openai" ? "bg-green-500" :
+                      p === "deepseek" ? "bg-blue-500" :
+                      p === "gemini" ? "bg-yellow-500" :
+                      p === "grok" ? "bg-gray-800" :
+                      "bg-orange-500"
+                    }`} />
+                    {PROVIDER_META[p].label}
+                  </div>
+                ))}
+              </div>
             </div>
           )
         )}
@@ -254,7 +289,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-gray-200 mt-16 py-6 text-center text-xs text-gray-400">
-        <p>AI PRD Maker — Dibuat dengan Next.js + DeepSeek AI</p>
+        <p>AI PRD Maker — Multi-AI Powered PRD Generator (OpenAI · DeepSeek · Gemini · Grok · Claude)</p>
       </footer>
 
       {/* Settings Modal */}

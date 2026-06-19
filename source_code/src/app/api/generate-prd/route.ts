@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generatePrd } from "@/lib/deepseek";
+import { resolveProviderType, resolveApiKey, resolveModel, getProvider } from "@/lib/providers/registry";
+import { generatePrdModular } from "@/lib/prd-generator";
+import type { ProviderType } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, apiKey, model } = await request.json();
+    const body = await request.json();
+    const { prompt, apiKey: userApiKey, model: userModel, provider: userProvider, customPrompts } = body;
 
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -12,18 +15,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for API key: user-provided takes precedence, then env
-    const effectiveKey = apiKey || process.env.DEEPSEEK_API_KEY || "";
-    if (!effectiveKey || effectiveKey === "your_deepseek_api_key_here") {
+    const providerType: ProviderType = resolveProviderType(userProvider);
+    const apiKey = resolveApiKey(providerType, userApiKey);
+
+    if (!apiKey) {
       return NextResponse.json(
-        { error: "API Key DeepSeek belum dikonfigurasi. Silakan atur di Pengaturan atau set DEEPSEEK_API_KEY di file .env.local" },
+        {
+          error: `API Key untuk ${providerType} belum dikonfigurasi. Silakan atur di Pengaturan atau set environment variable.`,
+        },
         { status: 500 }
       );
     }
 
-    const prd = await generatePrd(prompt.trim(), apiKey, model);
+    const model = resolveModel(providerType, userModel);
+    const provider = getProvider(providerType);
 
-    return NextResponse.json({ prd });
+    // Use the modular pipeline for more detailed PRD generation
+    const prd = await generatePrdModular(
+      provider,
+      prompt.trim(),
+      apiKey,
+      model,
+      (progress) => {
+        console.log(`[PRD Pipeline] ${progress.step}: ${progress.status} — ${progress.message}`);
+      },
+      customPrompts || null
+    );
+
+    return NextResponse.json({ prd, provider: providerType });
   } catch (error) {
     console.error("Error generating PRD:", error);
     const message =
