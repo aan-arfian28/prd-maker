@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveProviderType, resolveApiKey, resolveModel, getProvider } from "@/lib/providers/registry";
 import { generatePrdModular } from "@/lib/prd-generator";
 import type { ProviderType } from "@/lib/types";
+import type { PipelineProgress } from "@/lib/prd-generator";
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,19 +31,47 @@ export async function POST(request: NextRequest) {
     const model = resolveModel(providerType, userModel);
     const provider = getProvider(providerType);
 
-    // Use the modular pipeline for more detailed PRD generation
-    const prd = await generatePrdModular(
-      provider,
-      prompt.trim(),
-      apiKey,
-      model,
-      (progress) => {
-        console.log(`[PRD Pipeline] ${progress.step}: ${progress.status} — ${progress.message}`);
-      },
-      customPrompts || null
-    );
+    // ── SSE Streaming Response ───────────────────────────────────────
+    const encoder = new TextEncoder();
 
-    return NextResponse.json({ prd, provider: providerType });
+    function sseEvent(data: Record<string, unknown>): Uint8Array {
+      return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+    }
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const onProgress = (progress: PipelineProgress) => {
+            controller.enqueue(sseEvent({ type: "progress", ...progress }));
+          };
+
+          const prd = await generatePrdModular(
+            provider,
+            prompt.trim(),
+            apiKey,
+            model,
+            onProgress,
+            customPrompts || null
+          );
+
+          controller.enqueue(sseEvent({ type: "result", prd, provider: providerType }));
+          controller.close();
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Terjadi kesalahan saat membuat PRD";
+          controller.enqueue(sseEvent({ type: "error", message }));
+          controller.close();
+        }
+      },
+    });
+
+    return new NextResponse(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
   } catch (error) {
     console.error("Error generating PRD:", error);
     const message =

@@ -44,7 +44,35 @@ sequenceDiagram
 
 /* ── Chat revision prompt ────────────────────────────────────────── */
 
-export const CHAT_REVISION_PROMPT = `Kamu adalah seorang Product Manager dan System Analyst senior. Kamu sedang membantu merevisi PRD (Product Requirements Document).
+export const CHAT_REVISION_PROMPT = `Kamu adalah seorang Product Manager dan System Analyst senior. Tugasmu: merevisi PRD berdasarkan masukan user.
+
+⚠️ FORMAT OUTPUT WAJIB — Bacalah baik-baik. Kamu TIDAK BOLEH merespon dengan format apapun selain format ini. JANGAN gunakan JSON. JANGAN gunakan markdown biasa. Gunakan HANYA format di bawah ini:
+
+===MESSAGE===
+[Tulis penjelasan revisi kamu di sini, dalam bahasa Indonesia]
+===PRD===
+[Tulis SELURUH PRD yang sudah direvisi di sini, dalam format Markdown lengkap]
+
+CONTOH:
+===MESSAGE===
+Saya telah menambahkan fitur autentikasi dua faktor dan memperbarui diagram database.
+===PRD===
+# PRD — Product Requirements Document
+
+## Overview
+...seluruh markdown PRD...
+## Database Schema
+...diagram mermaid...
+
+———
+
+PENTING:
+- Baris ===MESSAGE=== dan ===PRD=== WAJIB ada sebagai pemisah
+- Setelah ===PRD===, tulis SELURUH PRD lengkap dalam Markdown (jangan disingkat)
+- JANGAN tambahkan teks apapun di luar dua section tersebut
+- JANGAN gunakan format JSON
+- JANGAN gunakan tag HTML/XML
+- Gunakan HANYA format ===SECTION=== seperti di atas
 
 ## Konteks
 Berikut adalah PRD saat ini:
@@ -55,26 +83,16 @@ Berikut adalah PRD saat ini:
 ## Riwayat Percakapan
 {chatHistory}
 
-## Instruksi
-User memberikan masukan/feedback. Tugasmu:
-1. Pahami masukan user dengan seksama
-2. Revisi PRD sesuai masukan tersebut
-3. Berikan penjelasan singkat tentang perubahan yang kamu lakukan
-
-## Format Output
-Kamu HARUS merespon dalam format JSON yang valid dengan struktur berikut:
-{
-  "prd": "MARKDOWN_PRD_LENGKAP_YANG_SUDAH_DIREVISI",
-  "message": "Penjelasan tentang revisi yang dilakukan, dalam bahasa Indonesia yang natural dan ramah"
-}
-
-## Aturan
+## Aturan Revisi
+- Pahami masukan user dengan seksama, lalu revisi PRD sesuai masukan
 - PRD yang direvisi harus TETAP dalam format Markdown lengkap
-- SEMUA diagram Mermaid yang ada harus dipertahankan atau diperbarui sesuai revisi
+- SEMUA diagram Mermaid yang ada harus dipertahankan atau diperbarui
 - Jangan menghapus bagian yang tidak disebutkan dalam masukan user
-- Respon HARUS JSON yang valid — jangan tambahkan teks lain di luar JSON
-- Gunakan bahasa Indonesia untuk message
-- Pastikan Mermaid syntax tetap valid`;
+- Pastikan Mermaid syntax tetap valid
+- Gunakan bahasa Indonesia untuk pesan
+
+## Format Output (sekali lagi)
+Ingat: gunakan ===MESSAGE=== dan ===PRD=== sebagai pemisah. Jangan gunakan format lain.`;
 
 /* ── Modular PRD pipeline prompts ────────────────────────────────── */
 
@@ -347,8 +365,7 @@ Hasilkan dalam format Markdown dengan struktur berikut:
 - **Deskripsi**: [Penjelasan detail]
 - **Dependensi**: [Requirement lain yang terkait]
 - **Validasi**: [Bagaimana memverifikasi requirement ini]
-
-[Ulangi — minimal 10 functional requirements]
+[Ulangi — Hingga mengcover semua fitur dan alur utama]
 
 ## Non-Functional Requirements
 
@@ -373,8 +390,6 @@ Hasilkan dalam format Markdown dengan struktur berikut:
 - ...
 
 ## Aturan
-- Minimal 10 functional requirements
-- Minimal 2 NFR untuk setiap kategori
 - Spesifik dan terukur (bukan generik)
 - Gunakan bahasa Indonesia`;
 

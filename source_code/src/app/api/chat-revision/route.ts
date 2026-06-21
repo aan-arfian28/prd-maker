@@ -3,6 +3,100 @@ import { resolveProviderType, resolveApiKey, resolveModel, getProvider } from "@
 import { getEffectivePrompt } from "@/lib/prompt-customization";
 import type { ProviderType } from "@/lib/types";
 
+/* ------------------------------------------------------------------ */
+/*  Delimiter-based output parser                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Parse the AI response which uses delimiter format:
+ *   ===MESSAGE===
+ *   …penjelasan revisi…
+ *   ===PRD===
+ *   …seluruh markdown PRD…
+ *
+ * Fallbacks are tried in order:
+ *  1. XML  <message>/<prd>   (legacy & some models prefer this)
+ *  2. JSON {"prd":"...","message":"..."}
+ *  3. Raw markdown (use directly, auto-generate message)
+ */
+function parseResponse(text: string): { prd: string; message: string } | null {
+  const raw = text.trim();
+
+  // Strategy 1: ===MESSAGE=== / ===PRD=== delimiters
+  const msgDelim = raw.match(/===MESSAGE===\s*\n?([\s\S]*?)(?=\n?===PRD===)/i);
+  const prdDelim = raw.match(/===PRD===\s*\n?([\s\S]*)/i);
+  if (prdDelim) {
+    return {
+      message: (msgDelim ? msgDelim[1].trim() : "PRD telah direvisi sesuai masukan Anda."),
+      prd: prdDelim[1].trim(),
+    };
+  }
+
+  // Strategy 2: <message> / <prd> XML-style (legacy format)
+  const xmlMsg = raw.match(/<message>\s*([\s\S]*?)\s*<\/message>/i);
+  const xmlPrd = raw.match(/<prd>\s*([\s\S]*?)\s*<\/prd>/i);
+  if (xmlPrd) {
+    return {
+      message: xmlMsg ? xmlMsg[1].trim() : "PRD telah direvisi sesuai masukan Anda.",
+      prd: xmlPrd[1].trim(),
+    };
+  }
+  // Handle truncated XML (missing closing tag)
+  const xmlPrdOpen = raw.match(/<prd>\s*([\s\S]*)/i);
+  if (xmlPrdOpen) {
+    // Remove trailing </message> or other closing tags from the content
+    let prd = xmlPrdOpen[1].trim();
+    // Strip any trailing XML close tags that might end up in the prd
+    prd = prd.replace(/<\/prd>/, "").replace(/<\/message>/, "");
+    const msgFromXml = raw.match(/<message>\s*([\s\S]*?)\s*<\/message>/i);
+    return {
+      message: msgFromXml ? msgFromXml[1].trim() : "PRD telah direvisi sesuai masukan Anda.",
+      prd,
+    };
+  }
+
+  // Strategy 3: JSON format (legacy)
+  const jsonCodeBlock = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = jsonCodeBlock ? jsonCodeBlock[1].trim() : raw;
+  if (jsonStr.startsWith("{")) {
+    try {
+      const objStart = jsonStr.indexOf("{");
+      const objEnd = jsonStr.lastIndexOf("}");
+      if (objEnd > objStart) {
+        const parsed = JSON.parse(jsonStr.slice(objStart, objEnd + 1));
+        if (parsed.prd && parsed.message) {
+          return { prd: parsed.prd, message: parsed.message };
+        }
+      }
+    } catch {
+      // continue
+    }
+  }
+
+  // Strategy 4: Raw text that looks like markdown (headings present)
+  if (raw.length > 500 && (raw.includes("# ") || raw.includes("## "))) {
+    // Try to extract first line as message if it's short and not a heading
+    const lines = raw.split("\n");
+    const firstLine = lines[0].trim();
+    if (firstLine.length > 0 && firstLine.length < 200 && !firstLine.startsWith("#") && !firstLine.startsWith("```") && !firstLine.startsWith("===")) {
+      return {
+        message: firstLine,
+        prd: lines.slice(1).join("\n").trim(),
+      };
+    }
+    return {
+      message: "PRD telah direvisi sesuai masukan Anda.",
+      prd: raw,
+    };
+  }
+
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Route handler                                                       */
+/* ------------------------------------------------------------------ */
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -56,7 +150,6 @@ export async function POST(request: NextRequest) {
       .replace("{prdContent}", prdContent)
       .replace("{chatHistory}", chatHistory);
 
-    // Convert messages to provider format
     const chatMessages: { role: "user" | "assistant"; content: string }[] = [
       ...(messages || []).map((m: { role: string; content: string }) => ({
         role: m.role as "user" | "assistant",
@@ -65,8 +158,10 @@ export async function POST(request: NextRequest) {
       { role: "user" as const, content: newMessage.trim() },
     ];
 
-    // Try up to 3 times for valid JSON
+    // Try up to 3 times
     let lastError: string | null = null;
+    let lastRawText: string | null = null;
+
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const text = await provider.chatCompletion(
@@ -76,34 +171,41 @@ export async function POST(request: NextRequest) {
           model
         );
 
-        // Extract JSON from response
-        let jsonStr = text.trim();
+        lastRawText = text;
 
-        // Remove markdown code block if present
-        if (jsonStr.startsWith("```")) {
-          const match = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-          if (match) {
-            jsonStr = match[1].trim();
-          }
-        }
+        // Debug: log the first/last 300 chars of the response
+        console.log(
+          `[Chat Revision] Attempt ${attempt + 1} — response ${text.length} chars:\n` +
+          `  START: ${text.slice(0, 200).replace(/\n/g, "\\n")}\n` +
+          `  END:   ${text.slice(-200).replace(/\n/g, "\\n")}`
+        );
 
-        const parsed = JSON.parse(jsonStr);
+        const parsed = parseResponse(text);
 
-        if (parsed.prd && parsed.message) {
+        if (parsed && parsed.prd) {
+          console.log(`[Chat Revision] Success on attempt ${attempt + 1}, PRD length: ${parsed.prd.length}`);
           return NextResponse.json({
             prd: parsed.prd,
             message: parsed.message,
           });
         }
 
-        throw new Error("Response missing required fields (prd, message)");
+        lastError = "Response tidak mengandung format yang dikenali (===MESSAGE===/===PRD===, XML, atau JSON)";
+        // Continue retry
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err);
-        if (err instanceof SyntaxError || lastError.includes("missing required")) {
-          continue;
-        }
+        // Only retry on parse failures, not hard errors
+        if (err instanceof SyntaxError || lastError.includes("format yang dikenali")) continue;
         throw err;
       }
+    }
+
+    // Log full response on final failure for debugging
+    if (lastRawText) {
+      console.error(
+        `[Chat Revision] ALL RETRIES FAILED. Last response (${lastRawText.length} chars):\n` +
+        lastRawText.slice(0, 1000)
+      );
     }
 
     throw new Error(`Gagal menghasilkan respons yang valid setelah 3 percobaan: ${lastError}`);

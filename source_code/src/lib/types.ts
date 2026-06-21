@@ -48,6 +48,8 @@ export type GeminiModelInfo = AiModelInfo;
 // App settings stored in localStorage
 export interface AppSettings {
   provider: ProviderType;
-  apiKey: string;
+  /** @deprecated — use apiKeys instead. Kept for backward compat migration. */
+  apiKey?: string;
+  apiKeys: Partial<Record<ProviderType, string>>;
   model: string;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { ChatMessage, ProviderType } from "@/lib/types";
 import { PROVIDER_META } from "@/lib/providers/types";
 import { loadCustomPrompts } from "@/lib/prompt-customization";
@@ -9,23 +9,61 @@ import PrdViewer from "@/components/PrdViewer";
 import PrdHistory from "@/components/PrdHistory";
 import SettingsModal, { getStoredSettings } from "@/components/SettingsModal";
 
+/* ------------------------------------------------------------------ */
+/*  Phase progress tracking                                            */
+/* ------------------------------------------------------------------ */
+
+type PhaseStatus = "pending" | "running" | "done" | "error";
+
+interface PhaseState {
+  key: string;
+  label: string;
+  status: PhaseStatus;
+  message: string;
+}
+
+const PHASES: { key: string; label: string }[] = [
+  { key: "analysis", label: "Menganalisis ide produk" },
+  { key: "features", label: "Merancang fitur inti" },
+  { key: "userflow", label: "Merancang alur pengguna" },
+  { key: "architecture", label: "Merancang arsitektur sistem" },
+  { key: "database", label: "Merancang skema database" },
+  { key: "techreq", label: "Mendefinisikan persyaratan teknis" },
+  { key: "assembly", label: "Menyusun PRD final" },
+];
+
+function initialPhases(): PhaseState[] {
+  return PHASES.map((p) => ({ key: p.key, label: p.label, status: "pending", message: "" }));
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main page                                                          */
+/* ------------------------------------------------------------------ */
+
 export default function Home() {
   const [prdContent, setPrdContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [progressMessage, setProgressMessage] = useState<string>("");
+  const [phases, setPhases] = useState<PhaseState[]>(initialPhases);
   const [currentProvider, setCurrentProvider] = useState<ProviderType>("deepseek");
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleGenerate = useCallback(async (prompt: string) => {
     setIsLoading(true);
     setError(null);
     setPrdContent("");
-    setProgressMessage("Menganalisis ide produk...");
+    setPhases(initialPhases());
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const settings = getStoredSettings();
       setCurrentProvider(settings.provider);
+
+      // Per-provider API key with backward compat fallback
+      const apiKey = settings.apiKeys?.[settings.provider] || (settings as unknown as Record<string, unknown>).apiKey as string || "";
 
       const response = await fetch("/api/generate-prd", {
         method: "POST",
@@ -33,27 +71,80 @@ export default function Home() {
         body: JSON.stringify({
           prompt,
           provider: settings.provider || undefined,
-          apiKey: settings.apiKey || undefined,
+          apiKey: apiKey || undefined,
           model: settings.model || undefined,
           customPrompts: loadCustomPrompts() || undefined,
         }),
+        signal: controller.signal,
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Gagal membuat PRD");
+        // Try to parse JSON error
+        let errorMsg = "Gagal membuat PRD";
+        try {
+          const errData = await response.json();
+          errorMsg = errData.error || errorMsg;
+        } catch {
+          // keep default
+        }
+        throw new Error(errorMsg);
       }
 
-      setProgressMessage("PRD berhasil dibuat!");
-      setPrdContent(data.prd);
+      // ── Read SSE stream ──────────────────────────────────────────
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse complete SSE events delimited by double-newline
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || ""; // keep incomplete last chunk
+
+        for (const part of parts) {
+          const dataLine = part
+            .split("\n")
+            .find((line) => line.startsWith("data: "));
+          if (!dataLine) continue;
+
+          try {
+            const data = JSON.parse(dataLine.slice(6));
+
+            if (data.type === "progress") {
+              setPhases((prev) =>
+                prev.map((p) =>
+                  p.key === data.step
+                    ? { ...p, status: data.status as PhaseStatus, message: data.message || "" }
+                    : p
+                )
+              );
+            } else if (data.type === "result") {
+              setPrdContent(data.prd);
+            } else if (data.type === "error") {
+              throw new Error(data.message || "Gagal membuat PRD");
+            }
+          } catch (parseErr) {
+            // If it threw an error from type==="error", re-throw
+            if (parseErr instanceof Error) throw parseErr;
+            // Otherwise skip malformed events
+          }
+        }
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // User cancelled — do nothing
+        return;
+      }
       const message =
         err instanceof Error ? err.message : "Terjadi kesalahan yang tidak diketahui";
       setError(message);
     } finally {
       setIsLoading(false);
-      setTimeout(() => setProgressMessage(""), 3000);
+      abortRef.current = null;
     }
   }, []);
 
@@ -67,6 +158,7 @@ export default function Home() {
   const handleLoadExample = useCallback(async () => {
     setError(null);
     setIsLoading(true);
+    setPhases(initialPhases());
     try {
       const response = await fetch("/contoh_prd.md");
       if (!response.ok) {
@@ -90,6 +182,36 @@ export default function Home() {
 
   const providerMeta = PROVIDER_META[currentProvider];
   const providerName = providerMeta?.label || "AI";
+
+  /* Phase status icons */
+  function PhaseIcon({ status }: { status: PhaseStatus }) {
+    switch (status) {
+      case "done":
+        return (
+          <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        );
+      case "running":
+        return (
+          <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+            <div className="w-4 h-4 border-2 border-indigo-400 border-t-indigo-600 rounded-full animate-spin" />
+          </div>
+        );
+      case "error":
+        return (
+          <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        );
+      default:
+        return (
+          <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+            <div className="w-2 h-2 bg-gray-300 rounded-full" />
+          </div>
+        );
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -170,21 +292,51 @@ export default function Home() {
           </div>
         )}
 
-        {/* Loading State */}
+        {/* Loading State — Phase Progress */}
         {isLoading && (
           <div className="mb-8 p-8 bg-white border border-gray-200 rounded-2xl shadow-sm animate-fadeInUp">
-            <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mb-4">
-                <div className="w-8 h-8 border-3 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+            <div className="max-w-md mx-auto">
+              <h3 className="text-lg font-semibold text-gray-800 mb-6 text-center">
+                Membuat PRD Anda...
+              </h3>
+
+              {/* Phase list */}
+              <div className="space-y-3">
+                {phases.map((phase) => (
+                  <div
+                    key={phase.key}
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-300 ${
+                      phase.status === "running"
+                        ? "bg-indigo-50 border border-indigo-200"
+                        : phase.status === "done"
+                          ? "bg-green-50/50"
+                          : phase.status === "error"
+                            ? "bg-red-50 border border-red-200"
+                            : "bg-gray-50"
+                    }`}
+                  >
+                    <PhaseIcon status={phase.status} />
+                    <span
+                      className={`text-sm flex-1 ${
+                        phase.status === "running"
+                          ? "text-indigo-700 font-medium"
+                          : phase.status === "done"
+                            ? "text-gray-600"
+                            : phase.status === "error"
+                              ? "text-red-700"
+                              : "text-gray-400"
+                      }`}
+                    >
+                      {phase.status === "running" && phase.message
+                        ? phase.message
+                        : phase.label}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">Membuat PRD Anda...</h3>
-              <p className="text-sm text-gray-500 max-w-md">
-                {progressMessage || "AI sedang menganalisis kebutuhan Anda dan membuat PRD profesional lengkap dengan diagram."}
-              </p>
-              <p className="text-xs text-gray-400 mt-2">
-                Menggunakan pipeline modular untuk hasil yang lebih detail dan berkualitas
-              </p>
-              <div className="mt-4 flex gap-1.5">
+
+              {/* Bottom pulse indicator while running */}
+              <div className="mt-6 flex justify-center gap-1.5">
                 <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse" style={{ animationDelay: "0s" }} />
                 <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
                 <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />

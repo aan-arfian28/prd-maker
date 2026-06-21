@@ -14,7 +14,7 @@ const STORAGE_KEY = "ai-prd-maker-settings";
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: "deepseek",
-  apiKey: "",
+  apiKeys: {},
   model: "deepseek-chat",
 };
 
@@ -24,9 +24,17 @@ function loadSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Backward compat: migrate old single-apiKey format to per-provider apiKeys
+      let apiKeys = parsed.apiKeys || {};
+      if (parsed.apiKey && typeof parsed.apiKey === "string" && parsed.apiKey.trim()) {
+        const provider = parsed.provider || DEFAULT_SETTINGS.provider;
+        if (!apiKeys[provider]) {
+          apiKeys = { ...apiKeys, [provider]: parsed.apiKey };
+        }
+      }
       return {
         provider: parsed.provider || DEFAULT_SETTINGS.provider,
-        apiKey: parsed.apiKey || "",
+        apiKeys,
         model: parsed.model || DEFAULT_SETTINGS.model,
       };
     }
@@ -67,7 +75,7 @@ export function getStoredSettings(): AppSettings {
 export function useSettings(): {
   settings: AppSettings;
   setProvider: (provider: ProviderType) => void;
-  setApiKey: (key: string) => void;
+  setApiKey: (provider: ProviderType, key: string) => void;
   setModel: (model: string) => void;
   clearAll: () => void;
 } {
@@ -98,7 +106,13 @@ export function useSettings(): {
   );
 
   const setApiKey = useCallback(
-    (apiKey: string) => update({ apiKey }),
+    (provider: ProviderType, apiKey: string) => {
+      const current = getStoredSettings();
+      const updatedKeys = { ...current.apiKeys, [provider]: apiKey };
+      // Clean up empty keys
+      if (!apiKey) delete updatedKeys[provider];
+      update({ apiKeys: updatedKeys });
+    },
     [update]
   );
 
@@ -171,7 +185,7 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { settings, setProvider, setApiKey, setModel, clearAll } = useSettings();
-  const [apiKeyInput, setApiKeyInput] = useState(settings.apiKey);
+  const [apiKeyInput, setApiKeyInput] = useState(settings.apiKeys[settings.provider] || "");
   const [showKey, setShowKey] = useState(false);
   const [models, setModels] = useState<AiModelInfo[]>(
     FALLBACK_MODELS[settings.provider] || []
@@ -182,19 +196,20 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const meta = PROVIDER_META[settings.provider];
 
-  // Sync local input when settings change externally
+  // Sync local input when provider or settings change
   useEffect(() => {
-    setApiKeyInput(settings.apiKey);
-  }, [settings.apiKey]);
+    setApiKeyInput(settings.apiKeys[settings.provider] || "");
+  }, [settings.provider, settings.apiKeys]);
 
   // Fetch model list when modal opens or provider changes
   useEffect(() => {
-    if (isOpen && settings.apiKey) {
-      fetchModels(settings.provider, settings.apiKey);
+    const currentKey = settings.apiKeys[settings.provider];
+    if (isOpen && currentKey) {
+      fetchModels(settings.provider, currentKey);
     } else if (isOpen) {
       setModels(FALLBACK_MODELS[settings.provider] || []);
     }
-  }, [isOpen, settings.provider, settings.apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, settings.provider, settings.apiKeys]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchModels(provider: ProviderType, apiKey: string) {
     if (!apiKey) {
@@ -220,7 +235,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   }
 
   function handleSave() {
-    setApiKey(apiKeyInput.trim());
+    setApiKey(settings.provider, apiKeyInput.trim());
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -368,7 +383,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </select>
               <button
                 type="button"
-                onClick={() => fetchModels(settings.provider, settings.apiKey || apiKeyInput)}
+                onClick={() => fetchModels(settings.provider, settings.apiKeys[settings.provider] || apiKeyInput)}
                 disabled={isLoadingModels}
                 className="px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-700 transition-all disabled:opacity-50"
                 title="Refresh model list"
@@ -416,7 +431,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {/* Status indicator */}
           <div className="flex items-center gap-2 text-xs">
-            {settings.apiKey ? (
+            {settings.apiKeys[settings.provider] ? (
               <>
                 <div className="w-2 h-2 bg-green-500 rounded-full" />
                 <span className="text-green-600">

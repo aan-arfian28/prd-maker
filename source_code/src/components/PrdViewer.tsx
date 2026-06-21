@@ -46,7 +46,7 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
             messages: messages.map((m) => ({ role: m.role, content: m.content })),
             newMessage,
             provider: settings.provider || undefined,
-            apiKey: settings.apiKey || undefined,
+            apiKey: settings.apiKeys?.[settings.provider] || (settings as unknown as Record<string, unknown>).apiKey as string || undefined,
             model: settings.model || undefined,
             customPrompts: loadCustomPrompts() || undefined,
           }),
