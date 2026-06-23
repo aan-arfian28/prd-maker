@@ -4,13 +4,14 @@
 
 <p align="center">
   <img src="docs/screenshot/app_overview.gif" alt="AI PRD Maker overview" width="800" />
+  <br/><em>Main interface: entering a prompt, watching the pipeline progress, and viewing the generated PRD</em>
 </p>
 
 ## What It Does
 
 Describe the application you want to build, and AI PRD Maker generates a comprehensive PRD through a **7-stage modular pipeline**. Each stage is handled by a dedicated AI call with its own system prompt, accumulating context across stages to produce deeply consistent, detailed output.
 
-The result is a 500-2000+ line Markdown document with embedded Mermaid diagrams (sequence diagrams, ERDs), user flows, core features, and full technical requirements -- ready to share with your team, investors, or developers.
+The result is a 600-2000+ line Markdown document with embedded Mermaid diagrams (sequence diagrams, ERDs), user flows, core features, and full technical requirements -- ready to share with your team, investors, or developers.
 
 ## Highlights
 
@@ -48,11 +49,6 @@ Complete PRD (Markdown with embedded diagrams)
 ```
 
 ## Screenshots
-
-<p align="center">
-  <img src="docs/screenshot/app_overview.gif" alt="Main interface and PRD generation" width="800" />
-  <br/><em>Main interface: entering a prompt, watching the pipeline progress, and viewing the generated PRD</em>
-</p>
 
 <p align="center">
   <img src="docs/screenshot/diagram_demo.gif" alt="Mermaid diagram rendering" width="800" />
