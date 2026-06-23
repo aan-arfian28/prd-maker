@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { PROMPT_METADATA, DEFAULT_PROMPTS } from "@/lib/prompts";
+import { PROMPT_METADATA, getDefaultPrompts } from "@/lib/prompts";
 import type { PromptMeta } from "@/lib/prompts";
 import { loadCustomPrompts, saveCustomPrompts, clearCustomPrompts } from "@/lib/prompt-customization";
 import type { CustomPromptMap } from "@/lib/prompt-customization";
+import { useLanguage } from "@/lib/i18n";
 
 /* ------------------------------------------------------------------ */
 /*  Props                                                             */
@@ -20,6 +21,7 @@ interface PromptEditorProps {
 /* ------------------------------------------------------------------ */
 
 export default function PromptEditor({ isOpen, onClose }: PromptEditorProps) {
+  const { t, lang, toggleLang } = useLanguage();
   const [activeTab, setActiveTab] = useState<string>(PROMPT_METADATA[0]?.key || "");
   const [edits, setEdits] = useState<CustomPromptMap>({});
   const [saved, setSaved] = useState(false);
@@ -28,21 +30,22 @@ export default function PromptEditor({ isOpen, onClose }: PromptEditorProps) {
   // Load custom prompts from localStorage when opened
   useEffect(() => {
     if (isOpen) {
-      setEdits(loadCustomPrompts());
+      setEdits(loadCustomPrompts(lang));
       setActiveTab(PROMPT_METADATA[0]?.key || "");
     }
-  }, [isOpen]);
+  }, [isOpen, lang]);
 
   const activeMeta: PromptMeta | undefined = PROMPT_METADATA.find(
     (m) => m.key === activeTab
   );
 
+  const defaults = getDefaultPrompts(lang);
   const currentText =
     edits[activeTab] !== undefined
       ? edits[activeTab]
-      : DEFAULT_PROMPTS[activeTab] || "";
+      : defaults[activeTab] || "";
 
-  const isModified = currentText !== (DEFAULT_PROMPTS[activeTab] || "");
+  const isModified = currentText !== (defaults[activeTab] || "");
 
   function handleTextChange(value: string) {
     setEdits((prev) => ({ ...prev, [activeTab]: value }));
@@ -50,7 +53,7 @@ export default function PromptEditor({ isOpen, onClose }: PromptEditorProps) {
   }
 
   function handleSave() {
-    saveCustomPrompts(edits);
+    saveCustomPrompts(lang, edits);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -66,8 +69,8 @@ export default function PromptEditor({ isOpen, onClose }: PromptEditorProps) {
   }
 
   function handleResetAll() {
-    if (window.confirm("Reset semua prompt ke default? Perubahan Anda akan hilang.")) {
-      clearCustomPrompts();
+    if (window.confirm(t("promptEditor.reset") + "?")) {
+      clearCustomPrompts(lang);
       setEdits({});
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -105,15 +108,29 @@ export default function PromptEditor({ isOpen, onClose }: PromptEditorProps) {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Language toggle inside editor */}
+            <button
+              onClick={toggleLang}
+              className="relative inline-flex items-center h-7 w-[60px] rounded-full transition-colors bg-white/20 hover:bg-white/30 flex-shrink-0"
+              title={t("lang.switch")}
+            >
+              <span className="absolute left-3 text-[10px] font-medium text-white/50 select-none pointer-events-none">EN</span>
+              <span className="absolute right-3 text-[10px] font-medium text-white/50 select-none pointer-events-none">ID</span>
+              <span
+                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                  lang === "en" ? "translate-x-[34px]" : "translate-x-0.5"
+                }`}
+              />
+            </button>
             {customizedCount > 0 && (
               <span className="text-xs text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded-full">
-                {customizedCount} prompt dikustomisasi
+                {customizedCount} {t("promptEditor.custom")}
               </span>
             )}
             <button
               onClick={onClose}
               className="text-white/50 hover:text-white transition-colors"
-              title="Tutup"
+              title={t("settings.close")}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -209,7 +226,7 @@ export default function PromptEditor({ isOpen, onClose }: PromptEditorProps) {
             onClick={handleResetAll}
             className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
           >
-            Reset Semua ke Default
+            {t("promptEditor.reset")}
           </button>
           <div className="flex items-center gap-2">
             <button
@@ -217,13 +234,13 @@ export default function PromptEditor({ isOpen, onClose }: PromptEditorProps) {
               disabled={!isModified}
               className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Reset Tab Ini
+              {t("promptEditor.reset")}
             </button>
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-all"
             >
-              Tutup
+              {t("promptEditor.cancel")}
             </button>
             <button
               onClick={handleSave}
@@ -234,10 +251,10 @@ export default function PromptEditor({ isOpen, onClose }: PromptEditorProps) {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Tersimpan
+                  {t("promptEditor.save")}
                 </>
               ) : (
-                "Simpan Prompt"
+                t("promptEditor.save")
               )}
             </button>
           </div>

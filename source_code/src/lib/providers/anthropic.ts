@@ -196,9 +196,30 @@ export const anthropicProvider: AiProvider = {
     return data.content?.map((b) => b.text).join("") || "";
   },
 
-  async fetchModels(_apiKey) {
-    // Anthropic does not have a public /v1/models REST endpoint.
-    // Return a curated list of current Claude models.
-    return FALLBACK_MODELS_ANTHROPIC;
+  async fetchModels(apiKey) {
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/models", {
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) return FALLBACK_MODELS_ANTHROPIC;
+      const data = await response.json();
+      if (!data.data || !Array.isArray(data.data)) return FALLBACK_MODELS_ANTHROPIC;
+
+      const models: AiModelInfo[] = data.data
+        .filter((m: { id?: string }) => !!m.id)
+        .map((m: { id: string; display_name?: string }) => ({
+          name: m.id,
+          displayName: m.display_name || m.id,
+          description: "",
+        }));
+
+      return models.length > 0 ? models : FALLBACK_MODELS_ANTHROPIC;
+    } catch {
+      return FALLBACK_MODELS_ANTHROPIC;
+    }
   },
 };

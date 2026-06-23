@@ -1,82 +1,65 @@
-import { DEFAULT_PROMPTS } from "./prompts";
+import { getDefaultPrompts } from "./prompts";
+import type { Lang } from "./i18n";
 
 /* ------------------------------------------------------------------ */
-/*  Storage key & types                                               */
+/*  Storage                                                            */
 /* ------------------------------------------------------------------ */
 
-const STORAGE_KEY = "ai-prd-maker-custom-prompts";
+const STORAGE_PREFIX = "ai-prd-maker-custom-prompts-";
 
 /** Map of prompt key → custom prompt text. Only overrides are stored. */
 export type CustomPromptMap = Record<string, string>;
 
-/* ------------------------------------------------------------------ */
-/*  localStorage helpers (client-side only)                           */
-/* ------------------------------------------------------------------ */
+function storageKey(lang: Lang): string {
+  return STORAGE_PREFIX + lang;
+}
 
-export function loadCustomPrompts(): CustomPromptMap {
+export function loadCustomPrompts(lang: Lang): CustomPromptMap {
   if (typeof window === "undefined") return {};
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(lang));
     if (raw) return JSON.parse(raw);
-  } catch {
-    // ignore
-  }
+  } catch { /* ignore */ }
   return {};
 }
 
-export function saveCustomPrompts(map: CustomPromptMap): void {
+export function saveCustomPrompts(lang: Lang, map: CustomPromptMap): void {
   if (typeof window === "undefined") return;
   try {
-    // Only store entries that actually differ from defaults
+    const defaults = getDefaultPrompts(lang);
     const clean: CustomPromptMap = {};
     for (const [key, value] of Object.entries(map)) {
-      if (value && value !== DEFAULT_PROMPTS[key]) {
+      if (value && value !== defaults[key]) {
         clean[key] = value;
       }
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
-  } catch {
-    // ignore
-  }
+    localStorage.setItem(storageKey(lang), JSON.stringify(clean));
+  } catch { /* ignore */ }
 }
 
-export function clearCustomPrompts(): void {
+export function clearCustomPrompts(lang: Lang): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignore
-  }
+    localStorage.removeItem(storageKey(lang));
+  } catch { /* ignore */ }
 }
 
 /* ------------------------------------------------------------------ */
 /*  Prompt resolution                                                 */
 /* ------------------------------------------------------------------ */
 
-/**
- * Returns the effective prompt for a given key:
- * custom override if available, otherwise the default.
- */
 export function getEffectivePrompt(
   key: string,
-  custom?: CustomPromptMap | null
+  custom?: CustomPromptMap | null,
+  lang?: Lang
 ): string {
   if (custom && custom[key]) return custom[key];
-  return DEFAULT_PROMPTS[key] || "";
+  return getDefaultPrompts(lang || "id")[key] || "";
 }
 
-/**
- * Merge custom overrides with defaults to produce the full prompt set.
- * Used server-side when the client sends partial overrides.
- */
 export function resolveAllPrompts(
-  custom?: CustomPromptMap | null
+  custom?: CustomPromptMap | null,
+  lang?: Lang
 ): Record<string, string> {
-  const resolved: Record<string, string> = { ...DEFAULT_PROMPTS };
-  if (custom) {
-    for (const [key, value] of Object.entries(custom)) {
-      if (value) resolved[key] = value;
-    }
-  }
-  return resolved;
+  return { ...getDefaultPrompts(lang || "id"), ...(custom || {}) };
 }

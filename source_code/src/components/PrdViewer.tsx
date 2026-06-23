@@ -1,25 +1,34 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { ChatMessage } from "@/lib/types";
 import MarkdownRenderer from "./MarkdownRenderer";
 import ChatPanel from "./ChatPanel";
 import { getStoredSettings } from "./SettingsModal";
 import { loadCustomPrompts } from "@/lib/prompt-customization";
+import { savePrd } from "@/lib/prd-db";
+import { useLanguage } from "@/lib/i18n";
 
 interface PrdViewerProps {
   markdown: string;
+  initialMessages?: ChatMessage[];
   onRevision: (newPrd: string, messages: ChatMessage[], newMessage: string) => Promise<void>;
 }
 
-export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export default function PrdViewer({ markdown, initialMessages, onRevision }: PrdViewerProps) {
+  const { t, lang } = useLanguage();
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages || []);
   const [chatOpen, setChatOpen] = useState(false);
   const [isRevising, setIsRevising] = useState(false);
   const [copied, setCopied] = useState(false);
   const [downloadReady, setDownloadReady] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Reset chat messages when a new PRD is loaded
+  useEffect(() => {
+    setMessages(initialMessages || []);
+  }, [initialMessages]);
 
   const handleSendMessage = useCallback(
     async (newMessage: string) => {
@@ -48,7 +57,8 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
             provider: settings.provider || undefined,
             apiKey: settings.apiKeys?.[settings.provider] || (settings as unknown as Record<string, unknown>).apiKey as string || undefined,
             model: settings.model || undefined,
-            customPrompts: loadCustomPrompts() || undefined,
+            customPrompts: loadCustomPrompts(lang) || undefined,
+            lang,
           }),
         });
 
@@ -108,17 +118,15 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
     if (isSaving) return;
     setIsSaving(true);
     try {
-      const res = await fetch("/api/save-prd", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markdown }),
-      });
-      if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-        // Notify history panel to refresh
-        window.dispatchEvent(new Event("prd-history-refresh"));
-      }
+      // Extract title from first # heading
+      const titleMatch = markdown.match(/^#\s+(.+)$/m);
+      const title = titleMatch ? titleMatch[1].trim() : "Untitled PRD";
+
+      await savePrd(title, markdown, messages);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      // Notify history panel to refresh
+      window.dispatchEvent(new Event("prd-history-refresh"));
     } catch {
       // ignore
     } finally {
@@ -133,7 +141,7 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-sm font-medium text-gray-700">PRD Siap</span>
+            <span className="text-sm font-medium text-gray-700">{t("viewer.ready")}</span>
           </div>
           <span className="text-xs text-gray-400 border border-gray-200 rounded-full px-2 py-0.5">
             v{messages.length + 1}
@@ -144,21 +152,21 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
           <button
             onClick={handleCopyMarkdown}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-all active:scale-95"
-            title="Salin Markdown"
+            title={t("viewer.copy")}
           >
             {copied ? (
               <>
                 <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                Tersalin!
+                {t("viewer.copied")}
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                Salin MD
+                {t("viewer.copy")}
               </>
             )}
           </button>
@@ -166,21 +174,21 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
           <button
             onClick={handleDownload}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-all active:scale-95"
-            title="Download PRD"
+            title={t("viewer.download")}
           >
             {downloadReady ? (
               <>
                 <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                Terdownload!
+                {t("viewer.downloaded")}
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                Download .md
+                {t("viewer.download")}
               </>
             )}
           </button>
@@ -189,26 +197,26 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
             onClick={handleSave}
             disabled={isSaving}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 border border-green-600 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-            title="Simpan PRD"
+            title={t("viewer.save")}
           >
             {isSaving ? (
               <>
                 <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Menyimpan...
+                {t("viewer.saving")}
               </>
             ) : saved ? (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                Tersimpan!
+                {t("viewer.saved")}
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                 </svg>
-                Simpan
+                {t("viewer.save")}
               </>
             )}
           </button>
@@ -220,12 +228,12 @@ export default function PrdViewer({ markdown, onRevision }: PrdViewerProps) {
                 ? "bg-indigo-100 text-indigo-700 border-indigo-200"
                 : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200"
             }`}
-            title="Chat Revisi"
+            title={t("viewer.chat")}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
-            Chat Revisi
+            {t("viewer.chat")}
           </button>
         </div>
       </div>

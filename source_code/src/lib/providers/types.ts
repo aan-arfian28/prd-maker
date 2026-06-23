@@ -46,7 +46,7 @@ export const PROVIDER_META: Record<ProviderType, ProviderMeta> = {
   gemini: {
     id: "gemini",
     label: "Google Gemini",
-    baseURL: "https://generativelanguage.googleapis.com/v1beta",
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/models",
     defaultModel: "gemini-2.5-flash",
     modelsEndpoint: null, // Gemini uses a different models.list approach
     apiKeyHelpUrl: "https://aistudio.google.com/app/apikey",

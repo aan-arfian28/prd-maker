@@ -1,15 +1,7 @@
 import type { AiProvider } from "./providers/types";
-import {
-  ANALYSIS_PROMPT,
-  FEATURES_PROMPT,
-  USERFLOW_PROMPT,
-  ARCHITECTURE_PROMPT,
-  DATABASE_PROMPT,
-  TECHREQ_PROMPT,
-  ASSEMBLY_PROMPT,
-} from "./prompts";
 import { getEffectivePrompt } from "./prompt-customization";
 import type { CustomPromptMap } from "./prompt-customization";
+import type { Lang } from "./i18n";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -94,6 +86,7 @@ async function runAnalysis(
   apiKey: string,
   model: string,
   onProgress: ProgressCallback,
+  lang: Lang,
   customPrompts?: CustomPromptMap | null
 ): Promise<ProductAnalysis> {
   onProgress({
@@ -102,9 +95,11 @@ async function runAnalysis(
     message: "Menganalisis ide produk secara mendalam...",
   });
 
-  const userPrompt = `Analisis ide aplikasi berikut secara mendalam:\n\n"${prompt}"\n\nBerikan analisis yang spesifik, detail, dan mendalam. Jangan generik.`;
+  const userPrompt = lang === "en"
+    ? `Deeply analyze the following application idea:\n\n"${prompt}"\n\nProvide specific, detailed, and in-depth analysis. Do not be generic.`
+    : `Analisis ide aplikasi berikut secara mendalam:\n\n"${prompt}"\n\nBerikan analisis yang spesifik, detail, dan mendalam. Jangan generik.`;
 
-  const systemPrompt = getEffectivePrompt("analysis", customPrompts);
+  const systemPrompt = getEffectivePrompt("analysis", customPrompts, lang);
 
   const text = await generateWithRetry(provider, systemPrompt, userPrompt, apiKey, model);
   const jsonStr = extractJsonFromResponse(text);
@@ -170,20 +165,23 @@ async function runSectionGeneration(
   apiKey: string,
   model: string,
   onProgress: ProgressCallback,
+  lang: Lang,
   customPrompts?: CustomPromptMap | null
 ) {
   const analysisJson = JSON.stringify(analysis, null, 2);
 
   // ── 2a: Features ──────────────────────────────────────────────
   onProgress({ step: "features", status: "running", message: "Merancang fitur-fitur inti..." });
-  const featuresSysPrompt = getEffectivePrompt("features", customPrompts)
+  const featuresSysPrompt = getEffectivePrompt("features", customPrompts, lang)
     .replace("{userPrompt}", userPrompt)
     .replace("{analysis}", analysisJson)
     .replace("{previousSections}", "_Ini adalah section pertama — belum ada section sebelumnya_");
   const features = await generateWithRetry(
     provider,
     featuresSysPrompt,
-    `Buat daftar fitur inti untuk: ${analysis.productName}. Pastikan sesuai dengan permintaan user: "${userPrompt}"`,
+    lang === "en"
+      ? `Create core features for: ${analysis.productName}. Ensure they match the user request: "${userPrompt}"`
+      : `Buat daftar fitur inti untuk: ${analysis.productName}. Pastikan sesuai dengan permintaan user: "${userPrompt}"`,
     apiKey,
     model
   );
@@ -191,14 +189,16 @@ async function runSectionGeneration(
 
   // ── 2b: User Flow (sees: userPrompt + analysis + features) ────
   onProgress({ step: "userflow", status: "running", message: "Merancang alur pengguna..." });
-  const userFlowSysPrompt = getEffectivePrompt("userflow", customPrompts)
+  const userFlowSysPrompt = getEffectivePrompt("userflow", customPrompts, lang)
     .replace("{userPrompt}", userPrompt)
     .replace("{analysis}", analysisJson)
     .replace("{features}", truncateForContext(features));
   const userFlow = await generateWithRetry(
     provider,
     userFlowSysPrompt,
-    `Buat user flow untuk: ${analysis.productName}. Pastikan alur mencakup semua fitur yang sudah didefinisikan.`,
+    lang === "en"
+      ? `Create user flows for: ${analysis.productName}. Ensure the flows cover all previously defined features.`
+      : `Buat user flow untuk: ${analysis.productName}. Pastikan alur mencakup semua fitur yang sudah didefinisikan.`,
     apiKey,
     model
   );
@@ -215,14 +215,16 @@ async function runSectionGeneration(
 
   // ── 2c: Architecture (sees: userPrompt + analysis + features + userFlow)
   onProgress({ step: "architecture", status: "running", message: "Merancang arsitektur sistem..." });
-  const archSysPrompt = getEffectivePrompt("architecture", customPrompts)
+  const archSysPrompt = getEffectivePrompt("architecture", customPrompts, lang)
     .replace("{userPrompt}", userPrompt)
     .replace("{analysis}", analysisJson)
     .replace("{features}", accForArchitecture);
   const architecture = await generateWithRetry(
     provider,
     archSysPrompt,
-    `Buat diagram arsitektur untuk: ${analysis.productName}. Pastikan arsitektur mendukung semua fitur dan user flow di atas.`,
+    lang === "en"
+      ? `Create architecture diagram for: ${analysis.productName}. Ensure the architecture supports all features and user flows above.`
+      : `Buat diagram arsitektur untuk: ${analysis.productName}. Pastikan arsitektur mendukung semua fitur dan user flow di atas.`,
     apiKey,
     model
   );
@@ -242,14 +244,16 @@ async function runSectionGeneration(
 
   // ── 2d: Database (sees: userPrompt + analysis + features + userFlow + architecture)
   onProgress({ step: "database", status: "running", message: "Merancang skema database..." });
-  const dbSysPrompt = getEffectivePrompt("database", customPrompts)
+  const dbSysPrompt = getEffectivePrompt("database", customPrompts, lang)
     .replace("{userPrompt}", userPrompt)
     .replace("{analysis}", analysisJson)
     .replace("{features}", accForDatabase);
   const database = await generateWithRetry(
     provider,
     dbSysPrompt,
-    `Buat skema database untuk: ${analysis.productName}. Pastikan skema mendukung arsitektur dan fitur yang sudah didefinisikan.`,
+    lang === "en"
+      ? `Create database schema for: ${analysis.productName}. Ensure the schema supports the architecture and features defined above.`
+      : `Buat skema database untuk: ${analysis.productName}. Pastikan skema mendukung arsitektur dan fitur yang sudah didefinisikan.`,
     apiKey,
     model
   );
@@ -272,14 +276,16 @@ async function runSectionGeneration(
 
   // ── 2e: TechReq (sees: ALL previous sections)
   onProgress({ step: "techreq", status: "running", message: "Mendefinisikan persyaratan teknis..." });
-  const techReqSysPrompt = getEffectivePrompt("techreq", customPrompts)
+  const techReqSysPrompt = getEffectivePrompt("techreq", customPrompts, lang)
     .replace("{userPrompt}", userPrompt)
     .replace("{analysis}", analysisJson)
     .replace("{features}", accForTechReq);
   const techRequirements = await generateWithRetry(
     provider,
     techReqSysPrompt,
-    `Buat technical requirements untuk: ${analysis.productName}. Pastikan requirements mencakup semua section di atas.`,
+    lang === "en"
+      ? `Create technical requirements for: ${analysis.productName}. Ensure the requirements cover all sections above.`
+      : `Buat technical requirements untuk: ${analysis.productName}. Pastikan requirements mencakup semua section di atas.`,
     apiKey,
     model
   );
@@ -395,6 +401,7 @@ async function runAssembly(
   apiKey: string,
   model: string,
   onProgress: ProgressCallback,
+  lang: Lang,
   customPrompts?: CustomPromptMap | null
 ): Promise<string> {
   onProgress({
@@ -403,13 +410,13 @@ async function runAssembly(
     message: "Menyusun overview dan technical constraints...",
   });
 
-  // Only send analysis + tech req summary to the AI — NOT all 5 sections.
-  // This keeps both input and output tokens small, avoiding output limits.
-  const assemblyPrompt = getEffectivePrompt("assembly", customPrompts)
+  const assemblyPrompt = getEffectivePrompt("assembly", customPrompts, lang)
     .replace("{analysis}", JSON.stringify(analysis, null, 2))
     .replace("{techReqSummary}", summarizeTechReq(sections.techRequirements));
 
-  const userPrompt = `Buat Overview dan Design & Technical Constraints untuk: ${analysis.productName}.`;
+  const userPrompt = lang === "en"
+    ? `Create Overview and Design & Technical Constraints for: ${analysis.productName}.`
+    : `Buat Overview dan Design & Technical Constraints untuk: ${analysis.productName}.`;
 
   const text = await generateWithRetry(provider, assemblyPrompt, userPrompt, apiKey, model);
 
@@ -464,16 +471,17 @@ export async function generatePrdModular(
   apiKey: string,
   model: string,
   onProgress: ProgressCallback,
+  lang: Lang,
   customPrompts?: CustomPromptMap | null
 ): Promise<string> {
   // Stage 1: Analysis
-  const analysis = await runAnalysis(provider, prompt, apiKey, model, onProgress, customPrompts);
+  const analysis = await runAnalysis(provider, prompt, apiKey, model, onProgress, lang, customPrompts);
 
   // Stage 2: Sequential section generation with accumulating context
-  const sections = await runSectionGeneration(provider, prompt, analysis, apiKey, model, onProgress, customPrompts);
+  const sections = await runSectionGeneration(provider, prompt, analysis, apiKey, model, onProgress, lang, customPrompts);
 
   // Stage 3: Assembly
-  const finalPrd = await runAssembly(provider, analysis, sections, apiKey, model, onProgress, customPrompts);
+  const finalPrd = await runAssembly(provider, analysis, sections, apiKey, model, onProgress, lang, customPrompts);
 
   return finalPrd;
 }

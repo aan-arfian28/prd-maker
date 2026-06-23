@@ -52,40 +52,69 @@ export const FALLBACK_MODELS: Record<ProviderType, AiModelInfo[]> = {
 
 /**
  * Fetch available models from the provider's API.
- * For providers without a models endpoint (Gemini, Anthropic), returns fallback.
+ * Gemini uses a query-param API key; OpenAI-compatible providers use Bearer.
+ * Anthropic has no public models endpoint → returns fallback.
  */
 export async function fetchAvailableModels(
   provider: ProviderType,
   apiKey: string
 ): Promise<AiModelInfo[]> {
-  const fallback = FALLBACK_MODELS[provider] || FALLBACK_MODELS_DEEPSEEK;
-
-  // Providers that don't have a public models list endpoint
-  if (provider === "gemini" || provider === "anthropic") {
-    return fallback;
-  }
-
-  // OpenAI-compatible providers (openai, deepseek, grok)
+  const fallback = FALLBACK_MODELS[provider];
   if (!apiKey) return fallback;
 
-  const endpoints: Record<string, string> = {
-    openai: "https://api.openai.com/v1/models",
-    deepseek: "https://api.deepseek.com/v1/models",
-    grok: "https://api.x.ai/v1/models",
-  };
-
-  const url = endpoints[provider];
-  if (!url) return fallback;
-
   try {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(8000),
-    });
+    let response: Response;
+
+    if (provider === "gemini") {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    } else if (provider === "anthropic") {
+      response = await fetch("https://api.anthropic.com/v1/models", {
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+    } else {
+      const endpoints: Record<string, string> = {
+        openai: "https://api.openai.com/v1/models",
+        deepseek: "https://api.deepseek.com/v1/models",
+        grok: "https://api.x.ai/v1/models",
+      };
+      const url = endpoints[provider];
+      if (!url) return fallback;
+      response = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(8000),
+      });
+    }
 
     if (!response.ok) return fallback;
 
     const data = await response.json();
+
+    // ── Gemini response format ────────────────────────────────────
+    if (provider === "gemini") {
+      if (!data.models || !Array.isArray(data.models)) return fallback;
+
+      const models: AiModelInfo[] = data.models
+        .filter((m: { name?: string; supportedGenerationMethods?: string[] }) =>
+          m.name && m.supportedGenerationMethods?.includes("generateContent")
+        )
+        .map((m: { name: string; displayName?: string; description?: string }) => ({
+          name: m.name.replace(/^models\//, ""),
+          displayName: m.displayName || m.name.replace(/^models\//, ""),
+          description: m.description || "",
+        }))
+        .sort((a: AiModelInfo, b: AiModelInfo) =>
+          a.displayName.localeCompare(b.displayName)
+        );
+
+      return models.length > 0 ? models : fallback;
+    }
+
+    // ── OpenAI-compatible response format ─────────────────────────
     if (!data.data || !Array.isArray(data.data)) return fallback;
 
     const models: AiModelInfo[] = data.data

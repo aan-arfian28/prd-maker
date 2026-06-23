@@ -3,11 +3,13 @@ import { resolveProviderType, resolveApiKey, resolveModel, getProvider } from "@
 import { generatePrdModular } from "@/lib/prd-generator";
 import type { ProviderType } from "@/lib/types";
 import type { PipelineProgress } from "@/lib/prd-generator";
+import type { Lang } from "@/lib/i18n";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, apiKey: userApiKey, model: userModel, provider: userProvider, customPrompts } = body;
+    const { prompt, apiKey: userApiKey, model: userModel, provider: userProvider, customPrompts, lang } = body;
+    const language: Lang = lang === "en" ? "en" : "id";
 
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -51,6 +53,7 @@ export async function POST(request: NextRequest) {
             apiKey,
             model,
             onProgress,
+            language,
             customPrompts || null
           );
 

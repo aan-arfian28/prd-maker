@@ -1,82 +1,96 @@
 # AI PRD Maker
 
-> AI-powered Product Requirements Document generator with Mermaid diagrams, chat revision, and DeepSeek AI.
+> A modular, multi-AI pipeline that turns your app idea into a production-grade Product Requirements Document -- complete with UML diagrams, database schemas, and technical specifications.
 
-Generate professional, detailed PRDs (500+ lines) simply by describing your app idea. Built with **Next.js 15**, **React 19**, and **DeepSeek AI**.
+<p align="center">
+  <img src="docs/screenshot/app_overview.gif" alt="AI PRD Maker overview" width="800" />
+</p>
 
-## Features
+## What It Does
 
-- **AI-Generated PRDs** — Describe your app in natural language and get a comprehensive, professionally structured Product Requirements Document in seconds.
-- **Mermaid Diagrams** — Every PRD includes at least two diagrams: a sequence diagram for system architecture and an ER diagram for the database schema (both rendered inline).
-- **Chat Revision** — Refine your PRD through an interactive chat interface — discuss changes with the AI and see the document update in real time.
-- **Markdown Rendering** — PRDs are rendered as rich, formatted documents with tables, headings, code blocks, and diagrams.
-- **PRD History** — Save generated PRDs locally for later reference, reload, or delete them.
-- **Model Selection** — Choose between `deepseek-chat` and `deepseek-reasoner` models.
-- **Configurable API Key** — Bring your own DeepSeek API key (stored in browser localStorage) or set it server-side via environment variable.
-- **Example Prompts** — Quick-start with built-in example prompts for common app types.
+Describe the application you want to build, and AI PRD Maker generates a comprehensive PRD through a **7-stage modular pipeline**. Each stage is handled by a dedicated AI call with its own system prompt, accumulating context across stages to produce deeply consistent, detailed output.
+
+The result is a 500-2000+ line Markdown document with embedded Mermaid diagrams (sequence diagrams, ERDs), user flows, core features, and full technical requirements -- ready to share with your team, investors, or developers.
+
+## Highlights
+
+- **7-Stage Modular Pipeline** -- Analysis, Features, User Flows, Architecture, Database Schema, Technical Requirements, and Final Assembly. Each stage builds on the previous, ensuring every section is grounded in the product analysis.
+- **5 AI Providers** -- OpenAI, DeepSeek, Google Gemini, xAI Grok, and Anthropic Claude. Switch between them in Settings with per-provider API key storage.
+- **Real-Time Progress** -- Watch each pipeline phase complete live in the loading screen. See exactly what's happening under the hood.
+- **Interactive Chat Revision** -- After generating a PRD, open the chat panel to request changes. The AI revises the full document while preserving Mermaid diagrams and untouched sections.
+- **Mermaid Diagram Rendering** -- Architecture sequence diagrams and database ERDs are rendered inline, with fullscreen zoom support.
+- **Bilingual UI** -- Toggle between English and Indonesian. System prompts, example prompts, and the generated PRD language follow your choice.
+- **Local-First Storage** -- PRDs, chat history, and settings are saved to your browser (IndexedDB + localStorage). No server-side storage. Export to `.md` for backup.
+- **Customizable Prompts** -- Edit the system prompt for any pipeline stage. Customizations are saved per-language so your English and Indonesian prompt tweaks stay independent.
+- **Hardware-Ready Prompts** -- Built-in detailed example prompts for SaaS restaurant POS, clinic management systems, and more.
+
+## Architecture
+
+```
+User Prompt
+    |
+    v
+Stage 1: Product Analysis (JSON)          -- deep-dive into product idea
+    |
+    v
+Stage 2: Sequential Section Generation    -- each section sees all previous output
+    |-- 2a: Core Features
+    |-- 2b: User Flows
+    |-- 2c: System Architecture (Mermaid)
+    |-- 2d: Database Schema (Mermaid ERD)
+    |-- 2e: Technical Requirements
+    |
+    v
+Stage 3: Final Assembly                   -- AI generates Overview + Design Constraints
+    |                                       programmatic concatenation of all sections
+    v
+Complete PRD (Markdown with embedded diagrams)
+```
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshot/app_overview.gif" alt="Main interface and PRD generation" width="800" />
+  <br/><em>Main interface: entering a prompt, watching the pipeline progress, and viewing the generated PRD</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshot/diagram_demo.gif" alt="Mermaid diagram rendering" width="800" />
+  <br/><em>Mermaid diagrams rendered inline with fullscreen zoom and dark mode support</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshot/app_setting.gif" alt="Settings and multi-provider support" width="800" />
+  <br/><em>Settings panel: 5 AI providers, per-provider API keys, model selection, and customizable prompts</em>
+</p>
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Framework | [Next.js 15](https://nextjs.org/) (App Router) |
+| Framework | Next.js 15 (App Router) |
 | Language | TypeScript |
 | Styling | Tailwind CSS 3 |
-| AI Provider | DeepSeek API (via OpenAI-compatible client) |
+| AI Providers | OpenAI, DeepSeek, Google Gemini, xAI Grok, Anthropic Claude |
 | Markdown | react-markdown + remark-gfm + rehype-raw |
 | Diagrams | Mermaid 11 |
+| Storage | IndexedDB + localStorage (client-side only) |
+| i18n | Custom lightweight translation system |
 | Runtime | Node.js |
-
-## Project Structure
-
-```
-ai-prd-maker/
-├── source_code/
-│   └── src/
-│       ├── app/
-│       │   ├── api/
-│       │   │   ├── generate-prd/route.ts    # PRD generation endpoint
-│       │   │   ├── chat-revision/route.ts   # Chat-based PRD revision
-│       │   │   ├── save-prd/route.ts        # Save PRD to disk
-│       │   │   ├── load-prd/route.ts        # Load saved PRD
-│       │   │   ├── delete-prd/route.ts      # Delete saved PRD
-│       │   │   └── list-models/route.ts     # List available models
-│       │   ├── layout.tsx
-│       │   └── page.tsx                     # Main page
-│       ├── components/
-│       │   ├── PromptInput.tsx              # PRD prompt input with examples
-│       │   ├── PrdViewer.tsx                # Markdown + diagram viewer
-│       │   ├── ChatPanel.tsx                # Chat revision panel
-│       │   ├── PrdHistory.tsx               # Saved PRDs list
-│       │   └── SettingsModal.tsx            # API key & model settings
-│       └── lib/
-│           ├── deepseek.ts                  # DeepSeek API client & prompts
-│           ├── modelList.ts                 # Model fetching & fallback list
-│           ├── types.ts                     # Shared TypeScript types
-│           └── textFlowchartParser.ts       # Text-to-Mermaid flowchart parser
-└── contoh_prd.md                            # Example generated PRD output
-```
 
 ## Getting Started
 
 ### Prerequisites
 
-- **Node.js** 18+
-- **DeepSeek API key** — Get one at [platform.deepseek.com](https://platform.deepseek.com/)
+- Node.js 18+
+- An API key from at least one supported provider (DeepSeek is the default)
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/Arfith/ai-prd-maker.git
 cd ai-prd-maker/source_code
-
-# Install dependencies
 npm install
-
-# Set up environment (optional — can also set API key in the browser UI)
-cp .env.example .env.local
-# Edit .env.local and add your DEEPSEEK_API_KEY
 ```
 
 ### Development
@@ -85,9 +99,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
 
-### Production Build
+### Production
 
 ```bash
 npm run build
@@ -96,48 +110,58 @@ npm start
 
 ## Configuration
 
-The app supports two ways to configure the DeepSeek API key:
+API keys can be set in two ways:
 
-1. **Browser UI** — Click the gear icon (⚙️) in the header to open Settings and enter your API key. Stored in `localStorage`.
-2. **Environment Variable** — Set `DEEPSEEK_API_KEY` in `.env.local`:
+**Browser Settings** (recommended) -- Click the gear icon in the header, select your provider, and enter the API key. Each provider's key is stored separately in `localStorage`.
 
-```bash
-DEEPSEEK_API_KEY=sk-your-deepseek-api-key
-```
-
-> Browser-provided keys take precedence over environment variables.
-
-Optionally, set a default model:
+**Environment Variables** -- Set provider-specific variables in `.env.local`:
 
 ```bash
-DEEPSEEK_MODEL=deepseek-chat
+OPENAI_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...
+GEMINI_API_KEY=...
+GROK_API_KEY=...
+ANTHROPIC_API_KEY=sk-ant-...
+DEFAULT_AI_PROVIDER=deepseek
 ```
 
-## How It Works
+Browser-provided keys take precedence over environment variables.
 
-1. **Enter a prompt** — Describe the app you want to build (in Indonesian). Example prompts are provided.
-2. **AI generates PRD** — The DeepSeek API generates a comprehensive PRD with:
-   - Overview & problem statement
-   - High-level requirements
-   - Core features with detailed descriptions
-   - User flow steps
-   - System architecture (Mermaid sequence diagram)
-   - Database schema (Mermaid ER diagram)
-   - Design & technical constraints
-3. **View & interact** — The PRD is rendered as rich Markdown with inline Mermaid diagrams.
-4. **Chat to revise** — Open the chat panel to discuss changes with the AI. It updates the PRD while preserving existing content and diagrams.
+## Project Structure
 
-## API Routes
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/generate-prd` | POST | Generate a new PRD from a prompt |
-| `/api/chat-revision` | POST | Revise PRD via chat conversation |
-| `/api/save-prd` | POST | Save a PRD to disk |
-| `/api/list-prds` | GET | List all saved PRDs |
-| `/api/load-prd` | GET | Load a specific saved PRD |
-| `/api/delete-prd` | DELETE | Delete a saved PRD |
-| `/api/list-models` | POST | Fetch available DeepSeek models |
+```
+source_code/src/
+├── app/
+│   ├── api/
+│   │   ├── generate-prd/route.ts      # SSE-streaming PRD generation
+│   │   ├── chat-revision/route.ts     # Chat-based PRD revision
+│   │   └── list-models/route.ts       # Fetch available AI models
+│   ├── layout.tsx
+│   └── page.tsx                       # Main application page
+├── components/
+│   ├── PromptInput.tsx                # Prompt input with example prompts
+│   ├── PrdViewer.tsx                  # Markdown viewer with toolbar
+│   ├── ChatPanel.tsx                  # Interactive chat revision
+│   ├── PrdHistory.tsx                 # Saved PRDs drawer (IndexedDB)
+│   ├── SettingsModal.tsx              # Provider, API key, model settings
+│   ├── PromptEditor.tsx               # Customize system prompts per stage
+│   ├── MarkdownRenderer.tsx           # Markdown + Mermaid rendering
+│   └── MermaidRenderer.tsx            # Mermaid diagram with zoom
+└── lib/
+    ├── prd-generator.ts               # 7-stage modular pipeline
+    ├── prompts.ts                     # System prompts (ID + EN)
+    ├── prompt-customization.ts        # Per-language prompt overrides
+    ├── prd-db.ts                      # IndexedDB wrapper
+    ├── i18n.ts                        # Translation system
+    ├── modelList.ts                   # Dynamic model fetching
+    ├── types.ts                       # Shared TypeScript types
+    └── providers/
+        ├── types.ts                   # Provider interface + metadata
+        ├── registry.ts                # Provider resolution
+        ├── openai-compatible.ts       # OpenAI, DeepSeek, Grok
+        ├── gemini.ts                  # Google Gemini
+        └── anthropic.ts               # Anthropic Claude
+```
 
 ## License
 
@@ -145,4 +169,4 @@ MIT
 
 ---
 
-Built with ❤️ using Next.js and DeepSeek AI.
+Built with Next.js and a modular pipeline architecture. No server-side storage -- your data stays in your browser.

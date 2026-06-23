@@ -200,9 +200,27 @@ export const geminiProvider: AiProvider = {
       .join("") || "";
   },
 
-  async fetchModels(_apiKey) {
-    // Gemini doesn't have a simple /v1/models REST endpoint like OpenAI.
-    // We return a curated static list. The user can also type custom model names.
-    return FALLBACK_MODELS_GEMINI;
+  async fetchModels(apiKey) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) return FALLBACK_MODELS_GEMINI;
+      const data = await response.json();
+      if (!data.models || !Array.isArray(data.models)) return FALLBACK_MODELS_GEMINI;
+
+      const models: AiModelInfo[] = data.models
+        .filter((m: { name?: string; supportedGenerationMethods?: string[] }) =>
+          m.name && m.supportedGenerationMethods?.includes("generateContent")
+        )
+        .map((m: { name: string; displayName?: string; description?: string }) => ({
+          name: m.name.replace(/^models\//, ""),
+          displayName: m.displayName || m.name.replace(/^models\//, ""),
+          description: m.description || "",
+        }));
+
+      return models.length > 0 ? models : FALLBACK_MODELS_GEMINI;
+    } catch {
+      return FALLBACK_MODELS_GEMINI;
+    }
   },
 };

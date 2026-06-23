@@ -5,6 +5,7 @@ import type { AiModelInfo, AppSettings, ProviderType } from "@/lib/types";
 import { FALLBACK_MODELS } from "@/lib/modelList";
 import { PROVIDER_META, ALL_PROVIDERS } from "@/lib/providers/types";
 import PromptEditor from "./PromptEditor";
+import { useLanguage } from "@/lib/i18n";
 
 /* ------------------------------------------------------------------ */
 /*  Storage helpers                                                    */
@@ -184,6 +185,7 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+  const { t } = useLanguage();
   const { settings, setProvider, setApiKey, setModel, clearAll } = useSettings();
   const [apiKeyInput, setApiKeyInput] = useState(settings.apiKeys[settings.provider] || "");
   const [showKey, setShowKey] = useState(false);
@@ -270,12 +272,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             </svg>
-            <h2 className="text-lg font-semibold text-white">Pengaturan AI</h2>
+            <h2 className="text-lg font-semibold text-white">{t("settings.title")}</h2>
           </div>
           <button
             onClick={onClose}
             className="text-white/70 hover:text-white transition-colors"
-            title="Tutup"
+            title={t("settings.close")}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -288,7 +290,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           {/* AI Provider Selector */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-              Penyedia AI
+              {t("settings.provider")}
             </label>
             <div className="grid grid-cols-1 gap-1.5">
               {ALL_PROVIDERS.map((p) => {
@@ -323,14 +325,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           {/* API Key */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-              {meta.label} API Key
+              {meta.label} {t("settings.apiKeyLabel")}
             </label>
             <div className="relative">
               <input
                 type={showKey ? "text" : "password"}
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder={`Masukkan ${meta.label} API Key...`}
+                placeholder={t("settings.apiKeyPlaceholder", { provider: meta.label })}
                 className="w-full px-4 py-2.5 pr-20 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 transition-all font-mono"
               />
               <button
@@ -358,16 +360,19 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 rel="noopener noreferrer"
                 className="text-indigo-600 hover:text-indigo-800 underline"
               >
-                Dapatkan API Key
+                {t("settings.apiKeyHelpPrefix")}
               </a>
-              {" "}dari {meta.label}. Key disimpan di browser Anda.
+              {" "}{t("settings.apiKeyHelpSuffix", { provider: meta.label })}
+            </p>
+            <p className="mt-1.5 text-xs text-red-700">
+              {t("settings.apiKeyHelpWarning")}
             </p>
           </div>
 
           {/* Model Selector */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-              Model AI
+              {t("settings.model")}
             </label>
             <div className="flex gap-2">
               <select
@@ -419,8 +424,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </svg>
                 </div>
                 <div className="text-left">
-                  <p className="text-sm font-medium text-gray-700">Customize Prompts</p>
-                  <p className="text-xs text-gray-400">Edit system prompts untuk setiap tahap pipeline AI</p>
+                  <p className="text-sm font-medium text-gray-700">{t("settings.customPrompt")}</p>
+                  <p className="text-xs text-gray-400">{t("settings.customPromptDesc")}</p>
                 </div>
               </div>
               <svg className="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -435,14 +440,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <>
                 <div className="w-2 h-2 bg-green-500 rounded-full" />
                 <span className="text-green-600">
-                  API Key {meta.label} tersimpan
+                  {t("settings.statusSaved", { provider: meta.label })}
                 </span>
               </>
             ) : (
               <>
                 <div className="w-2 h-2 bg-yellow-500 rounded-full" />
                 <span className="text-yellow-600">
-                  API Key belum diatur — menggunakan key dari server (.env)
+                  {t("settings.statusNotSet")}
                 </span>
               </>
             )}
@@ -455,14 +460,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             onClick={handleClear}
             className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
           >
-            Hapus Semua
+            {t("settings.clearAll")}
           </button>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-all"
             >
-              Batal
+              {t("settings.cancel")}
             </button>
             <button
               onClick={handleSave}
@@ -473,10 +478,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Tersimpan
+                  {t("settings.saved")}
                 </>
               ) : (
-                "Simpan"
+                t("settings.save")
               )}
             </button>
           </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveProviderType, resolveApiKey, resolveModel, getProvider } from "@/lib/providers/registry";
 import { getEffectivePrompt } from "@/lib/prompt-customization";
 import type { ProviderType } from "@/lib/types";
+import type { Lang } from "@/lib/i18n";
 
 /* ------------------------------------------------------------------ */
 /*  Delimiter-based output parser                                      */
@@ -108,7 +109,9 @@ export async function POST(request: NextRequest) {
       model: userModel,
       provider: userProvider,
       customPrompts,
+      lang,
     } = body;
+    const language: Lang = lang === "en" ? "en" : "id";
 
     if (!prdContent || typeof prdContent !== "string") {
       return NextResponse.json(
@@ -145,7 +148,7 @@ export async function POST(request: NextRequest) {
       )
       .join("\n");
 
-    const chatRevisionPrompt = getEffectivePrompt("chatRevision", customPrompts || null);
+    const chatRevisionPrompt = getEffectivePrompt("chatRevision", customPrompts || null, language);
     const systemPrompt = chatRevisionPrompt
       .replace("{prdContent}", prdContent)
       .replace("{chatHistory}", chatHistory);
@@ -160,7 +163,6 @@ export async function POST(request: NextRequest) {
 
     // Try up to 3 times
     let lastError: string | null = null;
-    let lastRawText: string | null = null;
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -171,19 +173,9 @@ export async function POST(request: NextRequest) {
           model
         );
 
-        lastRawText = text;
-
-        // Debug: log the first/last 300 chars of the response
-        console.log(
-          `[Chat Revision] Attempt ${attempt + 1} — response ${text.length} chars:\n` +
-          `  START: ${text.slice(0, 200).replace(/\n/g, "\\n")}\n` +
-          `  END:   ${text.slice(-200).replace(/\n/g, "\\n")}`
-        );
-
         const parsed = parseResponse(text);
 
         if (parsed && parsed.prd) {
-          console.log(`[Chat Revision] Success on attempt ${attempt + 1}, PRD length: ${parsed.prd.length}`);
           return NextResponse.json({
             prd: parsed.prd,
             message: parsed.message,
@@ -198,14 +190,6 @@ export async function POST(request: NextRequest) {
         if (err instanceof SyntaxError || lastError.includes("format yang dikenali")) continue;
         throw err;
       }
-    }
-
-    // Log full response on final failure for debugging
-    if (lastRawText) {
-      console.error(
-        `[Chat Revision] ALL RETRIES FAILED. Last response (${lastRawText.length} chars):\n` +
-        lastRawText.slice(0, 1000)
-      );
     }
 
     throw new Error(`Gagal menghasilkan respons yang valid setelah 3 percobaan: ${lastError}`);
