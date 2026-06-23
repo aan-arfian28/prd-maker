@@ -51,7 +51,7 @@ Complete PRD (Markdown with embedded diagrams)
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshot/diagram_demo.gif" alt="Mermaid diagram rendering" width="800" />
+  <img src="docs/screenshot/app_diagram_demo.gif" alt="Mermaid diagram rendering" width="800" />
   <br/><em>Mermaid diagrams rendered inline with fullscreen zoom</em>
 </p>
 
