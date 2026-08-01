@@ -42,9 +42,20 @@ export async function POST(request: NextRequest) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        let closed = false;
+        function safeEnqueue(data: Record<string, unknown>): void {
+          if (!closed) {
+            try {
+              controller.enqueue(sseEvent(data));
+            } catch {
+              closed = true;
+            }
+          }
+        }
+
         try {
           const onProgress = (progress: PipelineProgress) => {
-            controller.enqueue(sseEvent({ type: "progress", ...progress }));
+            safeEnqueue({ type: "progress", ...progress });
           };
 
           const prd = await generatePrdModular(
@@ -57,13 +68,17 @@ export async function POST(request: NextRequest) {
             customPrompts || null
           );
 
-          controller.enqueue(sseEvent({ type: "result", prd, provider: providerType }));
-          controller.close();
+          safeEnqueue({ type: "result", prd, provider: providerType });
+          if (!closed) {
+            try { controller.close(); } catch { /* already closed */ }
+          }
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Terjadi kesalahan saat membuat PRD";
-          controller.enqueue(sseEvent({ type: "error", message }));
-          controller.close();
+          safeEnqueue({ type: "error", message });
+          if (!closed) {
+            try { controller.close(); } catch { /* already closed */ }
+          }
         }
       },
     });

@@ -26,6 +26,7 @@ const T: TranslationMap = {
 
   // ── Error ──────────────────────────────────────────────────────
   "error.title":      { id: "Gagal membuat PRD",         en: "Failed to generate PRD" },
+  "error.streamInterrupted": { id: "Koneksi terputus saat membuat PRD. Ini biasanya terjadi karena proses terlalu lama (melebihi batas timeout server). Coba lagi, atau gunakan prompt yang lebih singkat.", en: "Connection interrupted while generating PRD. This typically happens when the process takes too long (exceeding server timeout). Please try again, or use a shorter prompt." },
   "error.openSettings":{ id: "Buka Pengaturan untuk memasukkan API Key", en: "Open Settings to enter your API Key" },
 
   // ── Loading / Phases ───────────────────────────────────────────
@@ -547,6 +548,10 @@ IMPLEMENTATION PLAN (ROADMAP)
   "settings.model":          { id: "Model AI",                 en: "AI Model" },
   "settings.customPrompt":   { id: "Customize Prompts",        en: "Customize Prompts" },
   "settings.customPromptDesc":{ id: "Edit system prompts untuk setiap tahap pipeline AI", en: "Edit system prompts for each AI pipeline stage" },
+  "settings.testConnection":    { id: "Tes Koneksi",               en: "Test Connection" },
+  "settings.testing":           { id: "Menguji koneksi...",         en: "Testing connection..." },
+  "settings.testSuccess":       { id: "✅ Koneksi berhasil — {count} model tersedia", en: "✅ Connection successful — {count} models available" },
+  "settings.testError":         { id: "❌ Gagal: {error}",          en: "❌ Failed: {error}" },
   "settings.statusSaved":    { id: "API Key {provider} tersimpan", en: "{provider} API Key saved" },
   "settings.statusNotSet":   { id: "API Key belum diatur — menggunakan key dari server (.env)", en: "API Key not set — using server key (.env)" },
   "settings.clearAll":       { id: "Hapus Semua",              en: "Clear All" },

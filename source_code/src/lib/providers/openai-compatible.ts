@@ -38,6 +38,8 @@ export function createOpenAICompatibleProvider(config: CompatibleConfig): AiProv
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
+      }, {
+        signal: AbortSignal.timeout(180000), // 3 min timeout
       });
       return result.choices[0]?.message?.content || "";
     },

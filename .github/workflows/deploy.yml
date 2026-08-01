@@ -54,7 +54,13 @@ jobs:
         key: ${{ secrets.VPS_SSH_KEY }}
         script: |
           cd /var/www/prd.arfith.dev/standalone
-          
+
           # Start or restart the Next.js standalone server
-          PORT=3001 pm2 startOrRestart server.js --name "prd-maker"
+          # pm2 startOrRestart has a bug where it crashes on first run (config undefined),
+          # so we handle start vs restart explicitly
+          if pm2 list | grep -q "prd-maker"; then
+            PORT=3001 pm2 restart "prd-maker"
+          else
+            PORT=3001 pm2 start server.js --name "prd-maker"
+          fi
           pm2 save

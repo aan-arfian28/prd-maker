@@ -89,41 +89,51 @@ export default function Home() {
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
 
-        for (const part of parts) {
-          const dataLine = part.split("\n").find((line) => line.startsWith("data: "));
-          if (!dataLine) continue;
+          for (const part of parts) {
+            const dataLine = part.split("\n").find((line) => line.startsWith("data: "));
+            if (!dataLine) continue;
 
-          try {
-            const data = JSON.parse(dataLine.slice(6));
-            if (data.type === "progress") {
-              setPhases((prev) =>
-                prev.map((p) =>
-                  p.key === data.step
-                    ? { ...p, status: data.status as PhaseStatus, message: data.message || "" }
-                    : p
-                )
-              );
-            } else if (data.type === "result") {
-              setPrdContent(data.prd);
-            } else if (data.type === "error") {
-              throw new Error(data.message || t("error.title"));
+            try {
+              const data = JSON.parse(dataLine.slice(6));
+              if (data.type === "progress") {
+                setPhases((prev) =>
+                  prev.map((p) =>
+                    p.key === data.step
+                      ? { ...p, status: data.status as PhaseStatus, message: data.message || "" }
+                      : p
+                  )
+                );
+              } else if (data.type === "result") {
+                setPrdContent(data.prd);
+              } else if (data.type === "error") {
+                throw new Error(data.message || t("error.title"));
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof Error) throw parseErr;
             }
-          } catch (parseErr) {
-            if (parseErr instanceof Error) throw parseErr;
           }
         }
+      } finally {
+        reader.releaseLock();
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setError(err instanceof Error ? err.message : t("error.title"));
+      // Translate cryptic stream errors into a helpful message
+      const rawMessage = err instanceof Error ? err.message : "";
+      if (rawMessage.includes("input stream") || rawMessage.includes("ReadableStream") || rawMessage.includes("network")) {
+        setError(t("error.streamInterrupted"));
+      } else {
+        setError(rawMessage || t("error.title"));
+      }
     } finally {
       setIsLoading(false);
       abortRef.current = null;

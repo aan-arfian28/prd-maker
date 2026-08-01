@@ -195,6 +195,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [saved, setSaved] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [testMessage, setTestMessage] = useState("");
 
   const meta = PROVIDER_META[settings.provider];
 
@@ -246,11 +248,46 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setApiKeyInput("");
     clearAll();
     setModels(FALLBACK_MODELS.deepseek);
+    setTestStatus("idle");
+    setTestMessage("");
+  }
+
+  async function handleTestConnection() {
+    const key = apiKeyInput.trim() || settings.apiKeys[settings.provider] || "";
+    if (!key) {
+      setTestStatus("error");
+      setTestMessage(t("settings.testError", { error: "API Key belum diisi" }));
+      return;
+    }
+
+    setTestStatus("testing");
+    setTestMessage("");
+
+    try {
+      const res = await fetch("/api/test-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: key, provider: settings.provider }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTestStatus("success");
+        setTestMessage(t("settings.testSuccess", { count: String(data.modelCount ?? "?") }));
+      } else {
+        setTestStatus("error");
+        setTestMessage(t("settings.testError", { error: data.error || "Unknown error" }));
+      }
+    } catch (err) {
+      setTestStatus("error");
+      setTestMessage(t("settings.testError", { error: err instanceof Error ? err.message : "Network error" }));
+    }
   }
 
   function handleProviderChange(provider: ProviderType) {
     setProvider(provider);
     setModels(FALLBACK_MODELS[provider] || []);
+    setTestStatus("idle");
+    setTestMessage("");
     // Clear the model to the new provider's default
   }
 
@@ -367,6 +404,37 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <p className="mt-1.5 text-xs text-red-700">
               {t("settings.apiKeyHelpWarning")}
             </p>
+
+            {/* Test Connection */}
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={testStatus === "testing"}
+                className="px-3 py-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-gray-600 hover:text-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {testStatus === "testing" ? t("settings.testing") : t("settings.testConnection")}
+              </button>
+              {testStatus !== "idle" && (
+                <span
+                  className={`text-xs ${
+                    testStatus === "success"
+                      ? "text-green-600"
+                      : testStatus === "error"
+                        ? "text-red-600"
+                        : "text-gray-400"
+                  }`}
+                >
+                  {testStatus === "testing" && (
+                    <span className="inline-flex items-center gap-1">
+                      <div className="w-3 h-3 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
+                      {testMessage || t("settings.testing")}
+                    </span>
+                  )}
+                  {testStatus !== "testing" && testMessage}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Model Selector */}
