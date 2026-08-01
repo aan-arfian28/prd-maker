@@ -1,0 +1,56 @@
+name: Deploy Next.js to VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Build Next.js Standalone
+      run: npm run build
+
+    - name: Prepare Standalone Directory
+      # Standalone doesn't include public/ or .next/static/ by default, so we copy them over
+      run: |
+        cp -r public .next/standalone/
+        cp -r .next/static .next/standalone/.next/
+
+    - name: Copy Files to VPS via SCP
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        # We only copy the self-contained standalone folder, not the whole repo
+        source: ".next/standalone/*"
+        target: "/var/www/prd.arfith.dev"
+        strip_components: 2
+
+    - name: Restart Application via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          cd /var/www/prd.arfith.dev/
+          
+          # We run the standalone server.js directly using Node, not npm
+          pm2 startOrRestart ecosystem.config.js || pm2 start server.js --name "prd-maker" -i 1 --time
+          
+          pm2 save

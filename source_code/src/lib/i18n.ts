@@ -570,9 +570,9 @@ IMPLEMENTATION PLAN (ROADMAP)
 
   // ── Storage Warning ────────────────────────────────────────────
   "storageWarning.title":  { id: "Data disimpan di browser ini", en: "Data stored in this browser" },
-  "storageWarning.body":   { id: "PRD, API key, dan pengaturan disimpan di localStorage & IndexedDB browser Anda. Menghapus data browsing, menggunakan incognito mode, atau berganti profil browser akan menghilangkan semua data. Gunakan tombol Download untuk backup PRD Anda. Kamu juga bisa meng-host app ini sendiri jika mau ",
-                               en: "PRDs, API keys, and settings are stored in your browser's localStorage & IndexedDB. Clearing browsing data, using incognito mode, or switching browser profiles will erase all data. Use the Download button to back up your PRDs. You can also host the app yourself if you want " },
-  "storageWarning.repo":   { id: "dengan repo ini.", en: "with this repo." },
+  "storageWarning.body":   { id: "PRD, API key, dan pengaturan disimpan di localStorage & IndexedDB browser Anda. Menghapus data browsing, menggunakan incognito mode, atau berganti profil browser akan menghilangkan semua data. Gunakan tombol Download untuk backup PRD Anda. Kamu juga bisa meng-host app ini sendiri jika mau, ",
+                               en: "PRDs, API keys, and settings are stored in your browser's localStorage & IndexedDB. Clearing browsing data, using incognito mode, or switching browser profiles will erase all data. Use the Download button to back up your PRDs. You can also host the app yourself if you want, " },
+  "storageWarning.repo":   { id: "tersedia di repo ini.", en: "available in this repo." },
   "storageWarning.dismiss":{ id: "Mengerti",                    en: "Got it" },
 
   // ── Footer ─────────────────────────────────────────────────────
