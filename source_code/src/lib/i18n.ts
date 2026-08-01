@@ -13,7 +13,7 @@ type TranslationMap = Record<string, { id: string; en: string }>;
 const T: TranslationMap = {
   // ── Header ─────────────────────────────────────────────────────
   "app.title":    { id: "AI PRD Maker",           en: "AI PRD Maker" },
-  "app.subtitle": { id: "Multi-AI Powered PRD Generator", en: "Multi-AI Powered PRD Generator" },
+  "app.subtitle": { id: "Multi-AI Compatible PRD Generator", en: "Multi-AI Compatible PRD Generator" },
   "app.reset":    { id: "Reset",                  en: "Reset" },
   "app.settings": { id: "Pengaturan",             en: "Settings" },
 
@@ -583,7 +583,7 @@ IMPLEMENTATION PLAN (ROADMAP)
   "storageWarning.dismiss":{ id: "Mengerti",                    en: "Got it" },
 
   // ── Footer ─────────────────────────────────────────────────────
-  "footer": { id: "AI PRD Maker — Multi-AI Powered PRD Generator (OpenAI · DeepSeek · Gemini · Grok · Claude)", en: "AI PRD Maker — Multi-AI Powered PRD Generator (OpenAI · DeepSeek · Gemini · Grok · Claude)" },
+  "footer": { id: "AI PRD Maker — Multi-AI Compatible PRD Generator (OpenAI · DeepSeek · Gemini · Grok · Claude)", en: "AI PRD Maker — Multi-AI Compatible PRD Generator (OpenAI · DeepSeek · Gemini · Grok · Claude)" },
 };
 
 /* ------------------------------------------------------------------ */
