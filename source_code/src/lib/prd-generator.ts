@@ -2,6 +2,7 @@ import type { AiProvider } from "./providers/types";
 import { getEffectivePrompt } from "./prompt-customization";
 import type { CustomPromptMap } from "./prompt-customization";
 import type { Lang } from "./i18n";
+import { tStatic } from "./i18n";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -57,7 +58,8 @@ async function generateWithRetry(
   userPrompt: string,
   apiKey: string,
   model: string,
-  maxRetries: number = 2
+  maxRetries: number = 2,
+  onRetry?: (attempt: number, maxRetries: number, error: string) => void
 ): Promise<string> {
   let lastError: string | null = null;
 
@@ -67,6 +69,9 @@ async function generateWithRetry(
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       if (attempt < maxRetries) {
+        if (onRetry) {
+          onRetry(attempt + 1, maxRetries, lastError);
+        }
         // Brief pause before retry
         await new Promise((r) => setTimeout(r, 1000));
       }
@@ -101,7 +106,9 @@ async function runAnalysis(
 
   const systemPrompt = getEffectivePrompt("analysis", customPrompts, lang);
 
-  const text = await generateWithRetry(provider, systemPrompt, userPrompt, apiKey, model);
+  const text = await generateWithRetry(provider, systemPrompt, userPrompt, apiKey, model, 2, (attempt, max, err) => {
+    onProgress({ step: "analysis", status: "running", message: tStatic("phase.retry", { attempt: String(attempt), max: String(max) }, lang) });
+  });
   const jsonStr = extractJsonFromResponse(text);
 
   let analysis: ProductAnalysis;
@@ -183,7 +190,11 @@ async function runSectionGeneration(
       ? `Create core features for: ${analysis.productName}. Ensure they match the user request: "${userPrompt}"`
       : `Buat daftar fitur inti untuk: ${analysis.productName}. Pastikan sesuai dengan permintaan user: "${userPrompt}"`,
     apiKey,
-    model
+    model,
+    2,
+    (attempt, max) => {
+      onProgress({ step: "features", status: "running", message: tStatic("phase.retry", { attempt: String(attempt), max: String(max) }, lang) });
+    }
   );
   onProgress({ step: "features", status: "done", message: "Fitur inti selesai" });
 
@@ -200,7 +211,11 @@ async function runSectionGeneration(
       ? `Create user flows for: ${analysis.productName}. Ensure the flows cover all previously defined features.`
       : `Buat user flow untuk: ${analysis.productName}. Pastikan alur mencakup semua fitur yang sudah didefinisikan.`,
     apiKey,
-    model
+    model,
+    2,
+    (attempt, max) => {
+      onProgress({ step: "userflow", status: "running", message: tStatic("phase.retry", { attempt: String(attempt), max: String(max) }, lang) });
+    }
   );
   onProgress({ step: "userflow", status: "done", message: "User flow selesai" });
 
@@ -226,7 +241,11 @@ async function runSectionGeneration(
       ? `Create architecture diagram for: ${analysis.productName}. Ensure the architecture supports all features and user flows above.`
       : `Buat diagram arsitektur untuk: ${analysis.productName}. Pastikan arsitektur mendukung semua fitur dan user flow di atas.`,
     apiKey,
-    model
+    model,
+    2,
+    (attempt, max) => {
+      onProgress({ step: "architecture", status: "running", message: tStatic("phase.retry", { attempt: String(attempt), max: String(max) }, lang) });
+    }
   );
   onProgress({ step: "architecture", status: "done", message: "Arsitektur sistem selesai" });
 
@@ -255,7 +274,11 @@ async function runSectionGeneration(
       ? `Create database schema for: ${analysis.productName}. Ensure the schema supports the architecture and features defined above.`
       : `Buat skema database untuk: ${analysis.productName}. Pastikan skema mendukung arsitektur dan fitur yang sudah didefinisikan.`,
     apiKey,
-    model
+    model,
+    2,
+    (attempt, max) => {
+      onProgress({ step: "database", status: "running", message: tStatic("phase.retry", { attempt: String(attempt), max: String(max) }, lang) });
+    }
   );
   onProgress({ step: "database", status: "done", message: "Skema database selesai" });
 
@@ -287,7 +310,11 @@ async function runSectionGeneration(
       ? `Create technical requirements for: ${analysis.productName}. Ensure the requirements cover all sections above.`
       : `Buat technical requirements untuk: ${analysis.productName}. Pastikan requirements mencakup semua section di atas.`,
     apiKey,
-    model
+    model,
+    2,
+    (attempt, max) => {
+      onProgress({ step: "techreq", status: "running", message: tStatic("phase.retry", { attempt: String(attempt), max: String(max) }, lang) });
+    }
   );
   onProgress({ step: "techreq", status: "done", message: "Persyaratan teknis selesai" });
 
@@ -418,7 +445,9 @@ async function runAssembly(
     ? `Create Overview and Design & Technical Constraints for: ${analysis.productName}.`
     : `Buat Overview dan Design & Technical Constraints untuk: ${analysis.productName}.`;
 
-  const text = await generateWithRetry(provider, assemblyPrompt, userPrompt, apiKey, model);
+  const text = await generateWithRetry(provider, assemblyPrompt, userPrompt, apiKey, model, 2, (attempt, max) => {
+    onProgress({ step: "assembly", status: "running", message: tStatic("phase.retry", { attempt: String(attempt), max: String(max) }, lang) });
+  });
 
   // Parse JSON response
   let overview = "";

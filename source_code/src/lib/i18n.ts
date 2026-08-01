@@ -28,6 +28,7 @@ const T: TranslationMap = {
   "error.title":      { id: "Gagal membuat PRD",         en: "Failed to generate PRD" },
   "error.streamInterrupted": { id: "Koneksi terputus saat membuat PRD. Ini biasanya terjadi karena proses terlalu lama (melebihi batas timeout server). Coba lagi, atau gunakan prompt yang lebih singkat.", en: "Connection interrupted while generating PRD. This typically happens when the process takes too long (exceeding server timeout). Please try again, or use a shorter prompt." },
   "error.openSettings":{ id: "Buka Pengaturan untuk memasukkan API Key", en: "Open Settings to enter your API Key" },
+  "error.apiTimeout":  { id: "Request ke {provider} timeout (10 menit). Kemungkinan: (1) VPS tidak bisa mencapai {baseUrl} — cek DNS/firewall, (2) API Key tidak valid, atau (3) prompt terlalu besar. Coba \"Tes Koneksi\" di Pengaturan untuk verifikasi.", en: "Request to {provider} timed out (10 min). Possible causes: (1) VPS cannot reach {baseUrl} — check DNS/firewall, (2) Invalid API Key, or (3) Prompt too large. Try \"Test Connection\" in Settings to verify." },
 
   // ── Loading / Phases ───────────────────────────────────────────
   "loading.heading":   { id: "Membuat PRD Anda...",           en: "Generating Your PRD..." },
@@ -38,6 +39,7 @@ const T: TranslationMap = {
   "phase.database":    { id: "Merancang skema database",      en: "Designing database schema" },
   "phase.techreq":     { id: "Mendefinisikan persyaratan teknis", en: "Defining technical requirements" },
   "phase.assembly":    { id: "Menyusun PRD final",            en: "Assembling final PRD" },
+  "phase.retry":       { id: "Gagal, mencoba ulang ({attempt}/{max})...", en: "Failed, retrying ({attempt}/{max})..." },
 
   // ── Prompt Input ───────────────────────────────────────────────
   "input.placeholder": { id: "Deskripsikan aplikasi yang ingin Anda buat PRD-nya...\n\nContoh: Aplikasi inventaris gudang dengan pencatatan stok masuk/keluar, manajemen batch, dan peringatan stok rendah untuk admin tunggal",
@@ -641,9 +643,9 @@ export function useLanguage() {
 }
 
 /** Non-hook version for use in callbacks where hooks can't be called */
-export function tStatic(key: string, vars?: Record<string, string>): string {
+export function tStatic(key: string, vars?: Record<string, string>, lang?: Lang): string {
   const entry = T[key];
-  let text = entry ? entry[getCurrentLang()] : key;
+  let text = entry ? entry[lang || getCurrentLang()] : key;
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {
       text = text.replace(`{${k}}`, v);

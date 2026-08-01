@@ -320,27 +320,38 @@ export default function Home() {
                 {t("loading.heading")}
               </h3>
               <div className="space-y-3">
-                {phases.map((phase) => (
+                {phases.map((phase) => {
+                  const isRetrying = phase.status === "running" && (phase.message.includes("mencoba ulang") || phase.message.includes("retrying"));
+                  return (
                   <div
                     key={phase.key}
                     className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-300 ${
-                      phase.status === "running" ? "bg-indigo-50 border border-indigo-200"
+                      phase.status === "running" && !isRetrying ? "bg-indigo-50 border border-indigo-200"
+                        : isRetrying ? "bg-amber-50 border border-amber-200"
                         : phase.status === "done" ? "bg-green-50/50"
                         : phase.status === "error" ? "bg-red-50 border border-red-200"
                         : "bg-gray-50"
                     }`}
                   >
-                    <PhaseIcon status={phase.status} />
+                    {isRetrying ? (
+                      <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                        <div className="w-4 h-4 border-2 border-amber-300 border-t-amber-600 rounded-full animate-spin" />
+                      </div>
+                    ) : (
+                      <PhaseIcon status={phase.status} />
+                    )}
                     <span className={`text-sm flex-1 ${
-                      phase.status === "running" ? "text-indigo-700 font-medium"
+                      phase.status === "running" && !isRetrying ? "text-indigo-700 font-medium"
+                        : isRetrying ? "text-amber-700 font-medium"
                         : phase.status === "done" ? "text-gray-600"
                         : phase.status === "error" ? "text-red-700"
                         : "text-gray-400"
                     }`}>
-                      {t(`phase.${phase.key}`)}
+                      {phase.message || t(`phase.${phase.key}`)}
                     </span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="mt-6 flex flex-col items-center gap-3">
                 <div className="flex gap-1.5">

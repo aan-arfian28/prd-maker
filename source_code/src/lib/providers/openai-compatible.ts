@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { AiProvider } from "./types";
 import type { AiModelInfo } from "@/lib/types";
 import { FALLBACK_MODELS_OPENAI, FALLBACK_MODELS_DEEPSEEK, FALLBACK_MODELS_GROK } from "@/lib/modelList";
+import { tStatic } from "@/lib/i18n";
 
 /* ------------------------------------------------------------------ */
 /*  OpenAI-compatible provider factory                                */
@@ -40,17 +41,14 @@ export function createOpenAICompatibleProvider(config: CompatibleConfig): AiProv
             { role: "user", content: userPrompt },
           ],
         }, {
-          signal: AbortSignal.timeout(120000), // 2 min per call — DeepSeek can be slow with large prompts
+          signal: AbortSignal.timeout(600000), // 10 min per call
         });
         return result.choices[0]?.message?.content || "";
       } catch (err) {
         // Rewrite misleading "user aborted" into actionable info
         if (err instanceof Error && err.message.includes("aborted")) {
           throw new Error(
-            `Request ke ${name} timeout setelah 60 detik. ` +
-            `Kemungkinan: (1) VPS tidak bisa mencapai ${baseURL} — cek DNS/firewall, ` +
-            `(2) API Key tidak valid, atau (3) prompt terlalu besar. ` +
-            `Coba "Tes Koneksi" di Pengaturan untuk verifikasi.`
+            tStatic("error.apiTimeout", { provider: name, baseUrl: baseURL })
           );
         }
         throw err;
@@ -93,9 +91,7 @@ export function createOpenAICompatibleProvider(config: CompatibleConfig): AiProv
       } catch (err) {
         if (err instanceof Error && err.message.includes("aborted")) {
           throw new Error(
-            `Request ke ${name} timeout setelah 60 detik. ` +
-            `Kemungkinan: (1) VPS tidak bisa mencapai ${baseURL} — cek DNS/firewall, ` +
-            `(2) API Key tidak valid, atau (3) prompt terlalu besar.`
+            tStatic("error.apiTimeout", { provider: name, baseUrl: baseURL })
           );
         }
         throw err;
