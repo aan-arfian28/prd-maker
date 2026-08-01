@@ -58,9 +58,10 @@ jobs:
           # Start or restart the Next.js standalone server
           # pm2 startOrRestart has a bug where it crashes on first run (config undefined),
           # so we handle start vs restart explicitly
+          # KEEP_ALIVE_TIMEOUT prevents Node.js from dropping long-lived SSE connections
           if pm2 list | grep -q "prd-maker"; then
-            PORT=3001 pm2 restart "prd-maker"
+            PORT=3001 KEEP_ALIVE_TIMEOUT=300000 pm2 restart "prd-maker"
           else
-            PORT=3001 pm2 start server.js --name "prd-maker"
+            PORT=3001 KEEP_ALIVE_TIMEOUT=300000 pm2 start server.js --name "prd-maker"
           fi
           pm2 save

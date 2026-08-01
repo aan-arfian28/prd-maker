@@ -53,6 +53,20 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Heartbeat: send a comment every 15s to keep proxies (nginx) and
+        // browsers from killing the connection during long AI calls.
+        const heartbeat = setInterval(() => {
+          if (!closed) {
+            try {
+              // SSE comment — ignored by clients, keeps TCP connection alive
+              controller.enqueue(encoder.encode(": heartbeat\n\n"));
+            } catch {
+              closed = true;
+              clearInterval(heartbeat);
+            }
+          }
+        }, 15000);
+
         try {
           const onProgress = (progress: PipelineProgress) => {
             safeEnqueue({ type: "progress", ...progress });
@@ -79,6 +93,8 @@ export async function POST(request: NextRequest) {
           if (!closed) {
             try { controller.close(); } catch { /* already closed */ }
           }
+        } finally {
+          clearInterval(heartbeat);
         }
       },
     });
