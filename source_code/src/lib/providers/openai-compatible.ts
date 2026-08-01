@@ -32,16 +32,29 @@ export function createOpenAICompatibleProvider(config: CompatibleConfig): AiProv
 
     async generateText(systemPrompt, userPrompt, apiKey, model) {
       const client = createClient(apiKey);
-      const result = await client.chat.completions.create({
-        model: model || defaultModel,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }, {
-        signal: AbortSignal.timeout(180000), // 3 min timeout
-      });
-      return result.choices[0]?.message?.content || "";
+      try {
+        const result = await client.chat.completions.create({
+          model: model || defaultModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        }, {
+          signal: AbortSignal.timeout(120000), // 2 min per call — DeepSeek can be slow with large prompts
+        });
+        return result.choices[0]?.message?.content || "";
+      } catch (err) {
+        // Rewrite misleading "user aborted" into actionable info
+        if (err instanceof Error && err.message.includes("aborted")) {
+          throw new Error(
+            `Request ke ${name} timeout setelah 60 detik. ` +
+            `Kemungkinan: (1) VPS tidak bisa mencapai ${baseURL} — cek DNS/firewall, ` +
+            `(2) API Key tidak valid, atau (3) prompt terlalu besar. ` +
+            `Coba "Tes Koneksi" di Pengaturan untuk verifikasi.`
+          );
+        }
+        throw err;
+      }
     },
 
     generateStream(systemPrompt, userPrompt, apiKey, model) {
@@ -66,14 +79,27 @@ export function createOpenAICompatibleProvider(config: CompatibleConfig): AiProv
 
     async chatCompletion(systemPrompt, messages, apiKey, model) {
       const client = createClient(apiKey);
-      const result = await client.chat.completions.create({
-        model: model || defaultModel,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-        ],
-      });
-      return result.choices[0]?.message?.content || "";
+      try {
+        const result = await client.chat.completions.create({
+          model: model || defaultModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+          ],
+        }, {
+          signal: AbortSignal.timeout(120000),
+        });
+        return result.choices[0]?.message?.content || "";
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("aborted")) {
+          throw new Error(
+            `Request ke ${name} timeout setelah 60 detik. ` +
+            `Kemungkinan: (1) VPS tidak bisa mencapai ${baseURL} — cek DNS/firewall, ` +
+            `(2) API Key tidak valid, atau (3) prompt terlalu besar.`
+          );
+        }
+        throw err;
+      }
     },
 
     async fetchModels(apiKey) {

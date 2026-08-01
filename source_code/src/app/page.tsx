@@ -115,6 +115,15 @@ export default function Home() {
               } else if (data.type === "result") {
                 setPrdContent(data.prd);
               } else if (data.type === "error") {
+                // Mark the failed step and any still-running step as error
+                const failedStep = data.step as string | undefined;
+                setPhases((prev) =>
+                  prev.map((p) => {
+                    if (failedStep && p.key === failedStep) return { ...p, status: "error" as PhaseStatus, message: data.message || "" };
+                    if (p.status === "running") return { ...p, status: "error" as PhaseStatus, message: "" };
+                    return p;
+                  })
+                );
                 throw new Error(data.message || t("error.title"));
               }
             } catch (parseErr) {
@@ -127,6 +136,12 @@ export default function Home() {
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
+      // Mark any still-running phase as error
+      setPhases((prev) =>
+        prev.map((p) =>
+          p.status === "running" ? { ...p, status: "error" as PhaseStatus, message: "" } : p
+        )
+      );
       // Translate cryptic stream errors into a helpful message
       const rawMessage = err instanceof Error ? err.message : "";
       if (rawMessage.includes("input stream") || rawMessage.includes("ReadableStream") || rawMessage.includes("network")) {
@@ -269,15 +284,23 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-red-800">{t("error.title")}</p>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
+              <p className="text-sm text-red-600 mt-1 break-words">{error}</p>
               {(error.includes("API Key") || error.includes("API key")) && (
                 <button
                   onClick={() => setSettingsOpen(true)}
                   className="inline-block mt-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
                 >
                   {t("error.openSettings")}
+                </button>
+              )}
+              {(error.includes("timeout") || error.includes("Timeout") || error.includes("DNS") || error.includes("firewall") || error.includes("VPS")) && (
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="inline-block mt-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                  {t("settings.testConnection")} di Pengaturan →
                 </button>
               )}
             </div>

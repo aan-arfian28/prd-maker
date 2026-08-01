@@ -67,8 +67,12 @@ export async function POST(request: NextRequest) {
           }
         }, 15000);
 
+        // Track the current step so we can report which step failed
+        let currentStep = "";
+
         try {
           const onProgress = (progress: PipelineProgress) => {
+            if (progress.status === "running") currentStep = progress.step;
             safeEnqueue({ type: "progress", ...progress });
           };
 
@@ -89,7 +93,7 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Terjadi kesalahan saat membuat PRD";
-          safeEnqueue({ type: "error", message });
+          safeEnqueue({ type: "error", message, step: currentStep || undefined });
           if (!closed) {
             try { controller.close(); } catch { /* already closed */ }
           }
