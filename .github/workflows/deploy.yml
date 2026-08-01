@@ -53,9 +53,8 @@ jobs:
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_SSH_KEY }}
         script: |
-          cd /var/www/prd.arfith.dev/
-
-          # We run the standalone server.js directly using Node, not npm
-          pm2 startOrRestart ecosystem.config.js || pm2 start server.js --name "prd-maker" -i 1 --time
-
+          cd /var/www/prd.arfith.dev/standalone
+          
+          # Start or restart the Next.js standalone server
+          PORT=3001 pm2 startOrRestart server.js --name "prd-maker"
           pm2 save
