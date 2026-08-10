@@ -24,6 +24,7 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
   const [downloadReady, setDownloadReady] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGeneratingClaudeMd, setIsGeneratingClaudeMd] = useState(false);
 
   // Reset chat messages when a new PRD is loaded
   useEffect(() => {
@@ -134,6 +135,83 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
     }
   }
 
+  async function handleGenerateClaudeMd() {
+    if (isGeneratingClaudeMd) return;
+    setIsGeneratingClaudeMd(true);
+
+    try {
+      const settings = getStoredSettings();
+      const response = await fetch("/api/generate-claude-md", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prdContent: markdown,
+          provider: settings.provider || undefined,
+          apiKey: settings.apiKeys?.[settings.provider] || (settings as unknown as Record<string, unknown>).apiKey as string || undefined,
+          model: settings.model || undefined,
+          customPrompts: loadCustomPrompts(lang) || undefined,
+          lang,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMsg = "Failed to generate CLAUDE.md";
+        try {
+          const errData = await response.json();
+          errorMsg = errData.error || errorMsg;
+        } catch { /* keep default */ }
+        throw new Error(errorMsg);
+      }
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            const dataLine = part.split("\n").find((line) => line.startsWith("data: "));
+            if (!dataLine) continue;
+
+            try {
+              const data = JSON.parse(dataLine.slice(6));
+              if (data.type === "result") {
+                // Download the generated CLAUDE.md
+                const blob = new Blob([data.claudeMd], { type: "text/markdown;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "CLAUDE.md";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              } else if (data.type === "error") {
+                throw new Error(data.message || "Failed to generate CLAUDE.md");
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof Error) throw parseErr;
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      console.error("CLAUDE.md generation error:", error);
+      // Show a brief error — the button just resets
+    } finally {
+      setIsGeneratingClaudeMd(false);
+    }
+  }
+
   return (
     <div className="relative">
       {/* Toolbar */}
@@ -217,6 +295,27 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                 </svg>
                 {t("viewer.save")}
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleGenerateClaudeMd}
+            disabled={isGeneratingClaudeMd}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+            title={t("viewer.generateClaudeMd")}
+          >
+            {isGeneratingClaudeMd ? (
+              <>
+                <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+                {t("viewer.generatingClaudeMd")}
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+                {t("viewer.generateClaudeMd")}
               </>
             )}
           </button>

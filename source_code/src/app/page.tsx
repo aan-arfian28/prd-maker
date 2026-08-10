@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { ChatMessage, ProviderType } from "@/lib/types";
+import type { ChatMessage, ProviderType, GenerationMode } from "@/lib/types";
 import { PROVIDER_META } from "@/lib/providers/types";
 import { loadCustomPrompts } from "@/lib/prompt-customization";
 import { useLanguage } from "@/lib/i18n";
@@ -18,10 +18,15 @@ interface PhaseState {
   message: string;
 }
 
-const PHASE_KEYS = ["analysis", "features", "userflow", "architecture", "database", "techreq", "assembly"] as const;
+const MODULAR_PHASE_KEYS = ["analysis", "features", "userflow", "architecture", "database", "techreq", "assembly"] as const;
+const SIMPLE_PHASE_KEYS = ["generation"] as const;
 
-function initialPhases(): PhaseState[] {
-  return PHASE_KEYS.map((key) => ({
+function phaseKeys(mode: GenerationMode): readonly string[] {
+  return mode === "simple" ? SIMPLE_PHASE_KEYS : MODULAR_PHASE_KEYS;
+}
+
+function initialPhases(mode: GenerationMode = "modular"): PhaseState[] {
+  return phaseKeys(mode).map((key) => ({
     key,
     status: "pending" as PhaseStatus,
     message: "",
@@ -38,6 +43,7 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [phases, setPhases] = useState<PhaseState[]>(initialPhases);
   const [currentProvider, setCurrentProvider] = useState<ProviderType>("deepseek");
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("modular");
   const [warningDismissed, setWarningDismissed] = useState(true);
 
   // Sync warning state from localStorage after mount (avoid hydration mismatch)
@@ -51,7 +57,7 @@ export default function Home() {
     setError(null);
     setPrdContent("");
     setLoadedMessages([]);
-    setPhases(initialPhases());
+    setPhases(initialPhases(generationMode));
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -72,6 +78,7 @@ export default function Home() {
           model: settings.model || undefined,
           customPrompts: loadCustomPrompts(lang) || undefined,
           lang,
+          mode: generationMode,
         }),
         signal: controller.signal,
       });
@@ -153,7 +160,7 @@ export default function Home() {
       setIsLoading(false);
       abortRef.current = null;
     }
-  }, [t]);
+  }, [t, generationMode]);
 
   const handleRevision = useCallback(
     async (newPrd: string, _messages: ChatMessage[], _newMessage: string) => {
@@ -165,7 +172,7 @@ export default function Home() {
   const handleLoadExample = useCallback(async () => {
     setError(null);
     setIsLoading(true);
-    setPhases(initialPhases());
+    setPhases(initialPhases(generationMode));
     try {
       const response = await fetch("/contoh_prd.md");
       if (!response.ok) throw new Error("Failed to load example PRD");
@@ -402,7 +409,7 @@ export default function Home() {
                 </button>
               </div>
 
-              <PromptInput onSubmit={handleGenerate} isLoading={isLoading} />
+              <PromptInput onSubmit={handleGenerate} isLoading={isLoading} mode={generationMode} onModeChange={setGenerationMode} />
 
               {/* Features Grid */}
               <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">

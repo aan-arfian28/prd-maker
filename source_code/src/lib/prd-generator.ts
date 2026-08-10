@@ -483,6 +483,54 @@ async function runAssembly(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Simple (monolithic) generation                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Generate a PRD in a single AI call using the monolithic prompt.
+ * Much faster and cheaper than the modular pipeline, but less detailed.
+ */
+export async function generatePrdSimple(
+  provider: AiProvider,
+  prompt: string,
+  apiKey: string,
+  model: string,
+  onProgress: ProgressCallback,
+  lang: Lang,
+  customPrompts?: CustomPromptMap | null
+): Promise<string> {
+  onProgress({
+    step: "generation",
+    status: "running",
+    message: lang === "en" ? "Generating PRD with Simple Mode..." : "Membuat PRD dengan Simple Mode...",
+  });
+
+  const systemPrompt = getEffectivePrompt("simple", customPrompts, lang);
+
+  const userPrompt = lang === "en"
+    ? `Create a comprehensive, highly detailed PRD (Product Requirements Document) in markdown format for the following application idea:\n\n"${prompt}"\n\nInclude Mermaid diagrams for architecture and database schema. Make it at least 1000 lines.`
+    : `Buat PRD (Product Requirements Document) yang sangat lengkap dan detail dalam format markdown untuk ide aplikasi berikut:\n\n"${prompt}"\n\nSertakan diagram Mermaid untuk arsitektur dan skema database. Buat minimal 1000 baris.`;
+
+  const text = await generateWithRetry(provider, systemPrompt, userPrompt, apiKey, model, 2, (attempt, max, err) => {
+    onProgress({
+      step: "generation",
+      status: "running",
+      message: lang === "en"
+        ? `Failed, retrying (${attempt}/${max})...`
+        : `Gagal, mencoba ulang (${attempt}/${max})...`,
+    });
+  });
+
+  onProgress({
+    step: "generation",
+    status: "done",
+    message: lang === "en" ? "PRD generation complete!" : "Pembuatan PRD selesai!",
+  });
+
+  return text;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main pipeline entry point                                         */
 /* ------------------------------------------------------------------ */
 

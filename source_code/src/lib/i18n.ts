@@ -39,6 +39,7 @@ const T: TranslationMap = {
   "phase.database":    { id: "Merancang skema database",      en: "Designing database schema" },
   "phase.techreq":     { id: "Mendefinisikan persyaratan teknis", en: "Defining technical requirements" },
   "phase.assembly":    { id: "Menyusun PRD final",            en: "Assembling final PRD" },
+  "phase.generation":  { id: "Membuat PRD (Simple Mode)...",     en: "Generating PRD (Simple Mode)..." },
   "phase.retry":       { id: "Gagal, mencoba ulang ({attempt}/{max})...", en: "Failed, retrying ({attempt}/{max})..." },
 
   // ── Prompt Input ───────────────────────────────────────────────
@@ -50,6 +51,13 @@ const T: TranslationMap = {
   "input.loading":     { id: "Membuat PRD...",                 en: "Generating PRD..." },
   "input.examples":    { id: "💡 Contoh prompt:",              en: "💡 Example prompts:" },
   "input.detailedExamples":    { id: "💡 Contoh prompt detail:",              en: "💡 Example detailed prompts:" },
+
+  // ── Generation Mode ─────────────────────────────────────────────
+  "mode.label":        { id: "Mode Generasi",               en: "Generation Mode" },
+  "mode.simple":       { id: "Simple",                      en: "Simple" },
+  "mode.modular":      { id: "Modular",                     en: "Modular" },
+  "mode.simpleDesc":   { id: "1x AI call, cepat (~30-60 detik)", en: "1 AI call, fast (~30-60s)" },
+  "mode.modularDesc":  { id: "7x AI call pipeline, lambat (~3-5 menit), hasil sangat detail", en: "7-stage AI pipeline, slow (~3-5 min), highly detailed" },
 
   // ── Example Prompts ────────────────────────────────────────────
   "example.1": { id: "Aplikasi inventaris gudang dengan pencatatan stok masuk/keluar, manajemen batch, dan peringatan stok rendah untuk admin tunggal",
@@ -522,6 +530,9 @@ IMPLEMENTATION PLAN (ROADMAP)
   "viewer.saving":   { id: "Menyimpan...",                en: "Saving..." },
   "viewer.saved":    { id: "Tersimpan!",                  en: "Saved!" },
   "viewer.chat":     { id: "Chat Revisi",                 en: "Chat Revision" },
+  "viewer.generateClaudeMd": { id: "Buat CLAUDE.md",       en: "Generate CLAUDE.md" },
+  "viewer.generatingClaudeMd": { id: "Membuat CLAUDE.md...", en: "Generating CLAUDE.md..." },
+  "viewer.claudeMdDone": { id: "CLAUDE.md selesai!",       en: "CLAUDE.md done!" },
 
   // ── Chat Panel ─────────────────────────────────────────────────
   "chat.title":       { id: "💬 Chat Revisi PRD",         en: "💬 PRD Revision Chat" },

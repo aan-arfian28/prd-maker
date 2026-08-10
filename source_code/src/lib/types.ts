@@ -1,5 +1,7 @@
 export type ProviderType = "openai" | "deepseek" | "gemini" | "grok" | "anthropic";
 
+export type GenerationMode = "modular" | "simple";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";

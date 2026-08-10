@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveProviderType, resolveApiKey, resolveModel, getProvider } from "@/lib/providers/registry";
-import { generatePrdModular } from "@/lib/prd-generator";
+import { generatePrdModular, generatePrdSimple } from "@/lib/prd-generator";
+import type { GenerationMode } from "@/lib/types";
 import type { ProviderType } from "@/lib/types";
 import type { PipelineProgress } from "@/lib/prd-generator";
 import type { Lang } from "@/lib/i18n";
@@ -8,7 +9,8 @@ import type { Lang } from "@/lib/i18n";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, apiKey: userApiKey, model: userModel, provider: userProvider, customPrompts, lang } = body;
+    const { prompt, apiKey: userApiKey, model: userModel, provider: userProvider, customPrompts, lang, mode } = body;
+    const generationMode: GenerationMode = mode === "simple" ? "simple" : "modular";
     const language: Lang = lang === "en" ? "en" : "id";
 
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
@@ -76,15 +78,9 @@ export async function POST(request: NextRequest) {
             safeEnqueue({ type: "progress", ...progress });
           };
 
-          const prd = await generatePrdModular(
-            provider,
-            prompt.trim(),
-            apiKey,
-            model,
-            onProgress,
-            language,
-            customPrompts || null
-          );
+          const prd = generationMode === "simple"
+            ? await generatePrdSimple(provider, prompt.trim(), apiKey, model, onProgress, language, customPrompts || null)
+            : await generatePrdModular(provider, prompt.trim(), apiKey, model, onProgress, language, customPrompts || null);
 
           safeEnqueue({ type: "result", prd, provider: providerType });
           if (!closed) {

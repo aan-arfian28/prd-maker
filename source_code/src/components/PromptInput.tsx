@@ -2,16 +2,19 @@
 
 import { useState } from "react";
 import { useLanguage } from "@/lib/i18n";
+import type { GenerationMode } from "@/lib/types";
 
 interface PromptInputProps {
   onSubmit: (prompt: string) => void;
   isLoading: boolean;
+  mode: GenerationMode;
+  onModeChange: (mode: GenerationMode) => void;
 }
 
 const EXAMPLE_KEYS = ["example.1", "example.2", "example.3"];
 const DETAILED_EXAMPLE_KEYS = ["example.4", "example.5"];
 
-export default function PromptInput({ onSubmit, isLoading }: PromptInputProps) {
+export default function PromptInput({ onSubmit, isLoading, mode, onModeChange }: PromptInputProps) {
   const { t } = useLanguage();
   const [prompt, setPrompt] = useState("");
 
@@ -48,8 +51,42 @@ export default function PromptInput({ onSubmit, isLoading }: PromptInputProps) {
           </div>
         </div>
 
+        {/* Mode Toggle */}
         <div className="flex items-center justify-between">
-          <div className="text-xs text-gray-500">{t("input.featureHint")}</div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-gray-500">{t("mode.label")}</span>
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              <button
+                type="button"
+                onClick={() => onModeChange("simple")}
+                disabled={isLoading}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  mode === "simple"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+                title={t("mode.simpleDesc")}
+              >
+                {t("mode.simple")}
+              </button>
+              <button
+                type="button"
+                onClick={() => onModeChange("modular")}
+                disabled={isLoading}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  mode === "modular"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+                title={t("mode.modularDesc")}
+              >
+                {t("mode.modular")}
+              </button>
+            </div>
+            <span className="text-[11px] text-gray-400 hidden sm:inline">
+              {mode === "simple" ? t("mode.simpleDesc") : t("mode.modularDesc")}
+            </span>
+          </div>
           <button
             type="submit"
             disabled={!prompt.trim() || isLoading}
