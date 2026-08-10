@@ -3,9 +3,17 @@ import { resolveProviderType, resolveApiKey, resolveModel, getProvider } from "@
 import { getEffectivePrompt } from "@/lib/prompt-customization";
 import type { ProviderType } from "@/lib/types";
 import type { Lang } from "@/lib/i18n";
+import {
+  chunkPrd,
+  isChunkable,
+  formatChunksForPrompt,
+  parseChunkUpdates,
+  reassemblePrd,
+  type ChunkUpdate,
+} from "@/lib/prd-chunker";
 
 /* ------------------------------------------------------------------ */
-/*  Delimiter-based output parser                                      */
+/*  Delimiter-based output parser (full PRD revision)                  */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -45,9 +53,7 @@ function parseResponse(text: string): { prd: string; message: string } | null {
   // Handle truncated XML (missing closing tag)
   const xmlPrdOpen = raw.match(/<prd>\s*([\s\S]*)/i);
   if (xmlPrdOpen) {
-    // Remove trailing </message> or other closing tags from the content
     let prd = xmlPrdOpen[1].trim();
-    // Strip any trailing XML close tags that might end up in the prd
     prd = prd.replace(/<\/prd>/, "").replace(/<\/message>/, "");
     const msgFromXml = raw.match(/<message>\s*([\s\S]*?)\s*<\/message>/i);
     return {
@@ -76,7 +82,6 @@ function parseResponse(text: string): { prd: string; message: string } | null {
 
   // Strategy 4: Raw text that looks like markdown (headings present)
   if (raw.length > 500 && (raw.includes("# ") || raw.includes("## "))) {
-    // Try to extract first line as message if it's short and not a heading
     const lines = raw.split("\n");
     const firstLine = lines[0].trim();
     if (firstLine.length > 0 && firstLine.length < 200 && !firstLine.startsWith("#") && !firstLine.startsWith("```") && !firstLine.startsWith("===")) {
@@ -89,6 +94,31 @@ function parseResponse(text: string): { prd: string; message: string } | null {
       message: "PRD telah direvisi sesuai masukan Anda.",
       prd: raw,
     };
+  }
+
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Chunked revision helpers                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Parse the AI's chunked revision response.
+ * Returns { message, chunks } or null if parsing fails.
+ */
+function parseChunkedResponse(text: string): { message: string; chunks: ChunkUpdate[] } | null {
+  const raw = text.trim();
+
+  // Extract message from ===MESSAGE=== section
+  const msgMatch = raw.match(/===MESSAGE===\s*\n?([\s\S]*?)(?=\n?===CHUNKS===)/i);
+  const message = msgMatch ? msgMatch[1].trim() : "PRD telah direvisi sesuai masukan Anda.";
+
+  // Extract chunks from ===CHUNKS=== section
+  const chunks = parseChunkUpdates(raw);
+
+  if (chunks && chunks.length > 0) {
+    return { message, chunks };
   }
 
   return null;
@@ -148,11 +178,6 @@ export async function POST(request: NextRequest) {
       )
       .join("\n");
 
-    const chatRevisionPrompt = getEffectivePrompt("chatRevision", customPrompts || null, language);
-    const systemPrompt = chatRevisionPrompt
-      .replace("{prdContent}", prdContent)
-      .replace("{chatHistory}", chatHistory);
-
     const chatMessages: { role: "user" | "assistant"; content: string }[] = [
       ...(messages || []).map((m: { role: string; content: string }) => ({
         role: m.role as "user" | "assistant",
@@ -160,6 +185,71 @@ export async function POST(request: NextRequest) {
       })),
       { role: "user" as const, content: newMessage.trim() },
     ];
+
+    /* -------------------------------------------------------------- */
+    /*  Try chunked revision first (faster, cheaper)                  */
+    /* -------------------------------------------------------------- */
+
+    const canChunk = isChunkable(prdContent);
+
+    if (canChunk) {
+      const chunks = chunkPrd(prdContent);
+      const chunkedPrdText = formatChunksForPrompt(chunks);
+
+      const chunkedSystemPrompt = getEffectivePrompt(
+        "chatRevisionChunked",
+        customPrompts || null,
+        language
+      )
+        .replace("{chunkedPrd}", chunkedPrdText)
+        .replace("{chatHistory}", chatHistory);
+
+      // Try chunked revision up to 2 times
+      let chunkedLastError: string | null = null;
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const text = await provider.chatCompletion(
+            chunkedSystemPrompt,
+            chatMessages,
+            apiKey,
+            model
+          );
+
+          const parsed = parseChunkedResponse(text);
+
+          if (parsed && parsed.chunks.length > 0) {
+            // Reassemble the PRD with updated chunks
+            const updatedPrd = reassemblePrd(prdContent, chunks, parsed.chunks);
+
+            return NextResponse.json({
+              prd: updatedPrd,
+              message: parsed.message,
+            });
+          }
+
+          chunkedLastError = "Response chunked tidak mengandung format yang dikenali (===CHUNKS=== dengan JSON array)";
+          // Continue retry
+        } catch (err) {
+          chunkedLastError = err instanceof Error ? err.message : String(err);
+          // Only retry on parse failures, not hard errors
+          if (err instanceof SyntaxError || (chunkedLastError && chunkedLastError.includes("format yang dikenali"))) continue;
+          throw err;
+        }
+      }
+
+      // Chunked revision failed — fall through to full revision below
+      console.warn("Chunked revision failed, falling back to full revision:", chunkedLastError);
+    }
+
+    /* -------------------------------------------------------------- */
+    /*  Full revision fallback                                          */
+    /* -------------------------------------------------------------- */
+
+    const chatRevisionPrompt = getEffectivePrompt("chatRevision", customPrompts || null, language);
+    const systemPrompt = chatRevisionPrompt
+      .replace("{prdContent}", prdContent)
+      .replace("{chatHistory}", chatHistory);
 
     // Try up to 3 times
     let lastError: string | null = null;
