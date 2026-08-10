@@ -3,12 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { ChatMessage } from "@/lib/types";
-import { listPrds, loadPrd, deletePrd as deletePrdFromDb, getTotalSize } from "@/lib/prd-db";
+import { listPrds, loadPrd, deletePrd as deletePrdFromDb, updatePrd, getTotalSize } from "@/lib/prd-db";
 import type { PrdSummary } from "@/lib/prd-db";
 import { useLanguage } from "@/lib/i18n";
 
 interface PrdHistoryProps {
-  onLoadPrd: (markdown: string, chatMessages?: ChatMessage[]) => void;
+  onLoadPrd: (markdown: string, chatMessages?: ChatMessage[], prdId?: string, title?: string) => void;
 }
 
 export default function PrdHistory({ onLoadPrd }: PrdHistoryProps) {
@@ -19,13 +19,24 @@ export default function PrdHistory({ onLoadPrd }: PrdHistoryProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [totalSize, setTotalSize] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Ensure portal target is available (client-side only)
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Focus rename input when entering rename mode
+  useEffect(() => {
+    if (renamingId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingId]);
 
   const refreshList = useCallback(async () => {
     setIsLoading(true);
@@ -73,11 +84,52 @@ export default function PrdHistory({ onLoadPrd }: PrdHistoryProps) {
     try {
       const entry = await loadPrd(id);
       if (entry) {
-        onLoadPrd(entry.markdown, entry.chatMessages);
+        onLoadPrd(entry.markdown, entry.chatMessages, entry.id, entry.title);
         setIsOpen(false);
       }
     } catch {
       // ignore
+    }
+  }
+
+  function startRename(prd: PrdSummary) {
+    setRenamingId(prd.id);
+    setRenameValue(prd.title);
+  }
+
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameValue("");
+  }
+
+  async function commitRename(id: string) {
+    const newTitle = renameValue.trim();
+    if (!newTitle || newTitle === prds.find((p) => p.id === id)?.title) {
+      cancelRename();
+      return;
+    }
+
+    // Optimistic update
+    setPrds((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, title: newTitle } : p))
+    );
+    setRenamingId(null);
+    setRenameValue("");
+
+    try {
+      await updatePrd(id, { title: newTitle });
+    } catch {
+      // Revert on failure — refresh from DB
+      refreshList();
+    }
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent, id: string) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitRename(id);
+    } else if (e.key === "Escape") {
+      cancelRename();
     }
   }
 
@@ -93,7 +145,7 @@ export default function PrdHistory({ onLoadPrd }: PrdHistoryProps) {
     reader.onload = (ev) => {
       const content = ev.target?.result;
       if (typeof content === "string") {
-        onLoadPrd(content, []);
+        onLoadPrd(content, [], undefined, file.name.replace(/\.(md|markdown)$/i, ""));
         setIsOpen(false);
       }
     };
@@ -231,9 +283,37 @@ export default function PrdHistory({ onLoadPrd }: PrdHistoryProps) {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-medium text-gray-800 truncate" title={prd.title}>
-                            {prd.title}
-                          </h4>
+                          {renamingId === prd.id ? (
+                            <input
+                              ref={renameInputRef}
+                              type="text"
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => handleRenameKeyDown(e, prd.id)}
+                              onBlur={() => commitRename(prd.id)}
+                              className="w-full text-sm font-medium text-gray-800 bg-white border border-indigo-300 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30"
+                              placeholder="Nama PRD..."
+                            />
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <h4
+                                className="text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-indigo-600 transition-colors"
+                                title={`${prd.title} — klik untuk ubah nama`}
+                                onClick={() => startRename(prd)}
+                              >
+                                {prd.title}
+                              </h4>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); startRename(prd); }}
+                                className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 opacity-0 group-hover:opacity-100 transition-all"
+                                title="Ubah nama"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-xs text-gray-400">{formatDate(prd.createdAt)}</span>
                             <span className="text-xs text-gray-300">·</span>

@@ -1,21 +1,27 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { ChatMessage } from "@/lib/types";
 import MarkdownRenderer from "./MarkdownRenderer";
 import ChatPanel from "./ChatPanel";
 import { getStoredSettings } from "./SettingsModal";
 import { loadCustomPrompts } from "@/lib/prompt-customization";
-import { savePrd } from "@/lib/prd-db";
+import { savePrd, updatePrd } from "@/lib/prd-db";
 import { useLanguage } from "@/lib/i18n";
 
 interface PrdViewerProps {
   markdown: string;
   initialMessages?: ChatMessage[];
   onRevision: (newPrd: string, messages: ChatMessage[], newMessage: string) => Promise<void>;
+  /** ID of the saved PRD (if loaded from history). Used for in-place updates. */
+  prdId?: string | null;
+  /** Title of the saved PRD (if loaded from history). */
+  prdTitle?: string;
+  /** Called when the PRD gets a new ID (first save) or title changes. */
+  onPrdIdChange?: (id: string, title: string) => void;
 }
 
-export default function PrdViewer({ markdown, initialMessages, onRevision }: PrdViewerProps) {
+export default function PrdViewer({ markdown, initialMessages, onRevision, prdId, prdTitle, onPrdIdChange }: PrdViewerProps) {
   const { t, lang } = useLanguage();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages || []);
   const [chatOpen, setChatOpen] = useState(false);
@@ -25,6 +31,30 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingClaudeMd, setIsGeneratingClaudeMd] = useState(false);
+
+  // Title editing state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editableTitle, setEditableTitle] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync editable title when prdTitle prop changes
+  useEffect(() => {
+    if (prdTitle) {
+      setEditableTitle(prdTitle);
+    } else {
+      // Extract from markdown
+      const titleMatch = markdown.match(/^#\s+(.+)$/m);
+      setEditableTitle(titleMatch ? titleMatch[1].trim() : "Untitled PRD");
+    }
+  }, [prdTitle, markdown]);
+
+  // Focus input when entering edit mode
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
 
   // Reset chat messages when a new PRD is loaded
   useEffect(() => {
@@ -106,7 +136,9 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `PRD-${new Date().toISOString().slice(0, 10)}.md`;
+    // Use the current title as filename
+    const safeName = (editableTitle || "PRD").replace(/[^a-zA-Z0-9\s_-]/g, "").trim() || "PRD";
+    a.download = `${safeName}-${new Date().toISOString().slice(0, 10)}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -119,11 +151,22 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
     if (isSaving) return;
     setIsSaving(true);
     try {
-      // Extract title from first # heading
+      // Extract title from first # heading if not set
       const titleMatch = markdown.match(/^#\s+(.+)$/m);
-      const title = titleMatch ? titleMatch[1].trim() : "Untitled PRD";
+      const title = editableTitle || (titleMatch ? titleMatch[1].trim() : "Untitled PRD");
 
-      await savePrd(title, markdown, messages);
+      if (prdId) {
+        // Update existing entry
+        await updatePrd(prdId, { title, markdown, chatMessages: messages });
+      } else {
+        // Create new entry
+        const result = await savePrd(title, markdown, messages);
+        // Notify parent of the new ID
+        if (onPrdIdChange) {
+          onPrdIdChange(result.id, title);
+        }
+      }
+
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       // Notify history panel to refresh
@@ -132,6 +175,49 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
       // ignore
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  function startEditingTitle() {
+    setIsEditingTitle(true);
+  }
+
+  function commitTitle() {
+    setIsEditingTitle(false);
+    const newTitle = editableTitle.trim();
+    if (!newTitle) {
+      // Revert to extracted title
+      const titleMatch = markdown.match(/^#\s+(.+)$/m);
+      setEditableTitle(titleMatch ? titleMatch[1].trim() : "Untitled PRD");
+      return;
+    }
+
+    // Update DB if we have an ID
+    if (prdId) {
+      updatePrd(prdId, { title: newTitle }).catch(() => {});
+      if (onPrdIdChange) {
+        onPrdIdChange(prdId, newTitle);
+      }
+    }
+
+    // Update the # heading in the markdown
+    // Note: we don't modify markdown here since it's managed by the parent.
+    // The editableTitle is separate from the markdown content.
+  }
+
+  function handleTitleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitTitle();
+    } else if (e.key === "Escape") {
+      setIsEditingTitle(false);
+      // Revert
+      if (prdTitle) {
+        setEditableTitle(prdTitle);
+      } else {
+        const titleMatch = markdown.match(/^#\s+(.+)$/m);
+        setEditableTitle(titleMatch ? titleMatch[1].trim() : "Untitled PRD");
+      }
     }
   }
 
@@ -183,7 +269,6 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
             try {
               const data = JSON.parse(dataLine.slice(6));
               if (data.type === "result") {
-                // Download the generated CLAUDE.md
                 const blob = new Blob([data.claudeMd], { type: "text/markdown;charset=utf-8" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
@@ -206,7 +291,6 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
       }
     } catch (error) {
       console.error("CLAUDE.md generation error:", error);
-      // Show a brief error — the button just resets
     } finally {
       setIsGeneratingClaudeMd(false);
     }
@@ -216,17 +300,47 @@ export default function PrdViewer({ markdown, initialMessages, onRevision }: Prd
     <div className="relative">
       {/* Toolbar */}
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-gray-200 px-6 py-3 mb-6 rounded-t-2xl flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-sm font-medium text-gray-700">{t("viewer.ready")}</span>
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse flex-shrink-0" />
+
+            {isEditingTitle ? (
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={editableTitle}
+                onChange={(e) => setEditableTitle(e.target.value)}
+                onKeyDown={handleTitleKeyDown}
+                onBlur={commitTitle}
+                className="text-sm font-medium text-gray-800 bg-white border border-indigo-300 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 min-w-[200px] max-w-[400px]"
+                placeholder="Nama PRD..."
+              />
+            ) : (
+              <button
+                onClick={startEditingTitle}
+                className="text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors truncate max-w-[400px] text-left group/title cursor-pointer"
+                title="Klik untuk ubah nama PRD"
+              >
+                <span className="truncate block">{editableTitle || "Untitled PRD"}</span>
+                <span className="inline-flex items-center ml-1.5 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0 align-middle">
+                  <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </span>
+              </button>
+            )}
           </div>
-          <span className="text-xs text-gray-400 border border-gray-200 rounded-full px-2 py-0.5">
+          <span className="text-xs text-gray-400 border border-gray-200 rounded-full px-2 py-0.5 flex-shrink-0">
             v{messages.length + 1}
           </span>
+          {prdId && (
+            <span className="text-xs text-green-500 flex-shrink-0" title="Tersimpan di browser">
+              💾
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={handleCopyMarkdown}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-all active:scale-95"

@@ -38,6 +38,8 @@ export default function Home() {
 
   const [prdContent, setPrdContent] = useState<string>("");
   const [loadedMessages, setLoadedMessages] = useState<ChatMessage[]>([]);
+  const [currentPrdId, setCurrentPrdId] = useState<string | null>(null);
+  const [currentPrdTitle, setCurrentPrdTitle] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -57,6 +59,8 @@ export default function Home() {
     setError(null);
     setPrdContent("");
     setLoadedMessages([]);
+    setCurrentPrdId(null);
+    setCurrentPrdTitle("");
     setPhases(initialPhases(generationMode));
 
     const controller = new AbortController();
@@ -187,6 +191,8 @@ export default function Home() {
   function handleReset() {
     setPrdContent("");
     setError(null);
+    setCurrentPrdId(null);
+    setCurrentPrdTitle("");
   }
 
   function dismissWarning() {
@@ -207,9 +213,11 @@ export default function Home() {
       <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <PrdHistory onLoadPrd={(markdown, chatMessages) => {
+            <PrdHistory onLoadPrd={(markdown, chatMessages, prdId, title) => {
               setPrdContent(markdown);
               setLoadedMessages(chatMessages || []);
+              setCurrentPrdId(prdId || null);
+              setCurrentPrdTitle(title || "");
             }} />
 
             <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -384,6 +392,12 @@ export default function Home() {
               markdown={prdContent}
               initialMessages={loadedMessages}
               onRevision={handleRevision}
+              prdId={currentPrdId}
+              prdTitle={currentPrdTitle}
+              onPrdIdChange={(id, title) => {
+                setCurrentPrdId(id);
+                setCurrentPrdTitle(title);
+              }}
             />
           </div>
         ) : (
