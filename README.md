@@ -84,8 +84,8 @@ Complete PRD (Markdown with embedded diagrams)
 ### Installation
 
 ```bash
-git clone https://github.com/Arfith/ai-prd-maker.git
-cd ai-prd-maker/source_code
+git clone https://github.com/aan-arfian28/prd-maker.git
+cd prd/source_code
 npm install
 ```
 
