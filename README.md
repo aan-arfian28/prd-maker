@@ -85,7 +85,7 @@ Complete PRD (Markdown with embedded diagrams)
 
 ```bash
 git clone https://github.com/aan-arfian28/prd-maker.git
-cd prd/source_code
+cd prd_maker/source_code
 npm install
 ```
 
